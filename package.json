@@ -1,5 +1,5 @@
 {
-  "name": "alankar-jwellers",
+  "name": "lakkhi-jwellers",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -8,18 +8,54 @@
     "start": "next start",
     "lint": "eslint"
   },
+  "overrides": {
+    "html2canvas": "npm:html2canvas-pro@latest"
+  },
   "dependencies": {
-    "next": "16.2.9",
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "@auth/prisma-adapter": "^2.11.2",
+    "@hookform/resolvers": "^5.2.2",
+    "@radix-ui/react-toast": "^1.2.15",
+    "@react-pdf/renderer": "^4.5.1",
+    "@sparticuz/chromium": "^147.0.0",
+    "async_hooks": "^1.0.0",
+    "axios": "^1.15.0",
+    "bcryptjs": "^3.0.3",
+    "class-variance-authority": "^0.7.1",
+    "cloudinary": "^2.9.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "file-saver": "^2.0.5",
+    "fs": "^0.0.1-security",
+    "html2canvas-pro": "^2.0.2",
+    "html2pdf.js": "^0.14.0",
+    "jszip": "^3.10.1",
+    "lodash": "^4.18.1",
+    "lucide-react": "^1.8.0",
+    "mongoose": "^9.4.1",
+    "next": "^16.2.4",
+    "next-auth": "^4.24.14",
+    "number-to-words": "^1.2.4",
+    "postcss-color-function": "^1.2.0",
+    "puppeteer-core": "^24.40.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-hook-form": "^7.72.1",
+    "simple-icons": "^16.17.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwind-scrollbar-hide": "^4.0.0",
+    "to-words": "^5.4.0",
+    "usehooks-ts": "^3.1.1",
+    "xlsx": "^0.18.5",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/lodash": "^4.17.24",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.2.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
