@@ -1,6 +1,7 @@
 "use client";
 
-import { Phone } from "lucide-react";
+import { Phone, MapPin } from "lucide-react";
+import { useState } from "react";
 
 type LocationInfo = {
   name: string;
@@ -9,23 +10,154 @@ type LocationInfo = {
   phone: string;
   hours: { days: string; time: string }[];
   services: string[];
+  mapUrl: string;
 };
 
 const location: LocationInfo = {
-  name: "SRI LAKKHI JEWELLERS",
-  addressLine1: "DARGAH ROAD NEAR GANDHI CHOWK TAJPUR",
+  name: "ALANKAR JEWELLERS",
+  addressLine1: "HOSPITAL ROAD NEAR NEEM CHOWK TAJPUR",
   addressLine2: "Samastipur, Bihar 848130",
-  phone: "+91 9631028016",
+  phone: "+91 9939586111",
   hours: [
     { days: "Mon – Sat:", time: "10:30 AM – 8:30 PM" },
     { days: "Sunday:", time: "11:00 AM – 6:00 PM" },
   ],
   services: ["Gold Appraisal, Cleaning,", "Custom Design, Exchange"],
+  mapUrl:
+    "https://maps.app.goo.gl/SF8Wz4J9JwzsMbZM7?g_st=awb",
 };
 
+// ── Ripple canvas button ──────────────────────────────────────────────────────
+function MapButton({ url }: { url: string }) {
+  const [ripples, setRipples] = useState<
+    { id: number; x: number; y: number }[]
+  >([]);
+  const [hovered, setHovered] = useState(false);
+
+  const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const id = Date.now();
+    setRipples((prev) => [
+      ...prev,
+      { id, x: e.clientX - rect.left, y: e.clientY - rect.top },
+    ]);
+    setTimeout(() => setRipples((prev) => prev.filter((r) => r.id !== id)), 700);
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      aria-label="Open store location in Google Maps"
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "10px",
+        paddingTop: "14px",
+        paddingBottom: "14px",
+        paddingLeft: "28px",
+        paddingRight: "28px",
+        border: "1.5px solid #8B6914",
+        background: hovered ? "#8B6914" : "transparent",
+        color: hovered ? "#FFF8F7" : "#8B6914",
+        cursor: "pointer",
+        transition: "background 0.28s ease, color 0.28s ease",
+        fontFamily: "'Georgia', 'Times New Roman', serif",
+        fontSize: "12px",
+        fontWeight: 600,
+        letterSpacing: "0.18em",
+        textTransform: "uppercase" as const,
+        borderRadius: 0,
+        userSelect: "none",
+        WebkitTapHighlightColor: "transparent",
+      }}
+    >
+      {/* Ripple layer */}
+      {ripples.map((r) => (
+        <span
+          key={r.id}
+          style={{
+            position: "absolute",
+            left: r.x,
+            top: r.y,
+            width: 0,
+            height: 0,
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.35)",
+            transform: "translate(-50%, -50%)",
+            animation: "aj-ripple 0.7s ease-out forwards",
+            pointerEvents: "none",
+          }}
+        />
+      ))}
+
+      {/* Pulse dot */}
+      <span
+        style={{
+          position: "relative",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 20,
+          height: 20,
+          flexShrink: 0,
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            width: 20,
+            height: 20,
+            borderRadius: "50%",
+            background: hovered ? "rgba(255,255,255,0.25)" : "rgba(139,105,20,0.18)",
+            animation: "aj-pulse 1.8s ease-in-out infinite",
+          }}
+        />
+        <MapPin
+          size={15}
+          strokeWidth={2}
+          style={{ position: "relative", zIndex: 1 }}
+        />
+      </span>
+
+      Get Directions
+
+      {/* Arrow that slides in on hover */}
+      <span
+        style={{
+          display: "inline-block",
+          transform: hovered ? "translateX(4px)" : "translateX(0)",
+          opacity: hovered ? 1 : 0,
+          transition: "transform 0.22s ease, opacity 0.22s ease",
+          fontSize: "14px",
+          lineHeight: 1,
+        }}
+      >
+        →
+      </span>
+
+      {/* Keyframes injected once */}
+      <style>{`
+        @keyframes aj-ripple {
+          to { width: 320px; height: 320px; opacity: 0; }
+        }
+        @keyframes aj-pulse {
+          0%, 100% { transform: scale(1); opacity: 0.6; }
+          50% { transform: scale(2.4); opacity: 0; }
+        }
+      `}</style>
+    </button>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export default function LocationSection() {
   return (
-    <section className="w-full bg-[#FAF6F1] py-20 md:py-28 px-6 md:px-12 lg:px-20">
+    <section className="w-full bg-[#FFF8F7] py-20 md:py-28 px-6 md:px-12 lg:px-20">
       <div className="max-w-screen-xl mx-auto">
 
         {/* ── Header ── */}
@@ -39,7 +171,7 @@ export default function LocationSection() {
               letterSpacing: "0.01em",
             }}
           >
-            Visit Our Flagship Atelier
+            Visit Our Flagship Store
           </h2>
           <p
             className="text-[#5C4A3A]/70 max-w-2xl mx-auto leading-[1.7]"
@@ -102,6 +234,22 @@ export default function LocationSection() {
                 />
                 {location.phone}
               </a>
+            </div>
+
+            {/* ── Map CTA ── */}
+            <div className="mb-2">
+              <MapButton url={location.mapUrl} />
+
+              {/* Subtle coordinate hint */}
+              <p
+                className="mt-4 text-[#5C4A3A]/50 flex items-center gap-1.5"
+                style={{
+                  fontFamily: "'Georgia', 'Times New Roman', serif",
+                  fontSize: "11px",
+                  letterSpacing: "0.06em",
+                }}
+              >
+              </p>
             </div>
 
             {/* Divider */}
@@ -169,14 +317,16 @@ export default function LocationSection() {
             </div>
           </div>
 
-          {/* ── Right: Image Placeholder ── */}
-          {/* Replace inner div with:
-              <Image src="/showroom.jpg" alt="Mansion Road Showroom" fill className="object-cover" />
-          */}
-          <div className="relative w-full lg:w-[580px] xl:w-[640px] flex-shrink-0 rounded-sm overflow-hidden shadow-md"
+          {/* ── Right: Image ── */}
+          <div
+            className="relative w-full lg:w-[580px] xl:w-[640px] flex-shrink-0 rounded-sm overflow-hidden shadow-md"
             style={{ aspectRatio: "16/10" }}
           >
-            <img src="./Shop-Location.jpeg" alt="" className="w-full h-full object-cover" />
+            <img
+              src="./Shop-Location.png"
+              alt="Alankar Jewellers showroom"
+              className="w-full h-full object-cover"
+            />
           </div>
 
         </div>

@@ -53,12 +53,20 @@ export async function POST(req: Request) {
 
     let product;
 
+    console.log("Barcode: ", item.barcode);
+    
+
     // =========================
     // 🔹 HUID PRODUCT
     // =========================
     if (item.huid) {
       const exists = await Product.findOne({ huid: item.huid }).session(session);
       if (exists) throw new Error("Duplicate HUID");
+    
+    if (item.barcode) {
+      const barcodeExists = await Product.findOne({ barcode: item.barcode }).session(session);
+      if (barcodeExists) throw new Error("Duplicate Barcode");
+    }
 
       const created = await Product.create(
         [{
@@ -75,6 +83,7 @@ export async function POST(req: Request) {
           huid: item.huid,
           isHUID: true,
           hsn: item.hsn,
+          barcode: item.barcode || undefined,
         }],
         { session }
       );
@@ -94,6 +103,11 @@ export async function POST(req: Request) {
       //   isHUID: false,
       // }).session(session);
 
+       if (item.barcode) {
+      const barcodeExists = await Product.findOne({ barcode: item.barcode }).session(session);
+      if (barcodeExists) throw new Error("Duplicate Barcode");
+    }
+
       const created = await Product.create(
           [{
             name: item.name,
@@ -108,6 +122,7 @@ export async function POST(req: Request) {
             makingCharge: item.makingCharge,
             isHUID: false,
             hsn: item.hsn,
+            barcode: item.barcode || undefined,
           }],
           { session }
         );

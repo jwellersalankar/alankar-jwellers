@@ -20,6 +20,7 @@ import {
 import Image from "next/image";
 import NavBar from "../components/core/NavBar";
 import Footer from "../components/core/Footer";
+import LocationSection from "../components/home/Location";
 
 // ─── Colour & type tokens (from the design) ───────────────────────────────────
 // Crimson:  #8B1A1A   Deep red accent
@@ -137,7 +138,7 @@ const Hero: React.FC = () => (
 // ─── HERITAGE ────────────────────────────────────────────────────────────────
 const Heritage: React.FC = () => (
   <section className="bg-[#FFF8F7] py-20 lg:py-28">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className=" mx-auto px-4 sm:px-6 lg:px-8">
       {/* Section heading */}
       <div className="text-center mb-14">
         <h2 className="font-serif text-3xl lg:text-4xl text-[#7D0005] mb-3">
@@ -147,9 +148,9 @@ const Heritage: React.FC = () => (
       </div>
 
       {/* Grid: craftsman image + card */}
-      <div className="grid md:grid-cols-2 gap-2 items-stretch">
+      <div className="grid md:grid-cols-3 gap-2">
         {/* Craftsman image */}
-        <div className="relative aspect-[4/3] md:aspect-auto bg-[#1C1C1C] flex items-center justify-center overflow-hidden">
+        <div className="relative aspect-4/3 md:aspect-video bg-[#1C1C1C] flex items-center justify-center overflow-hidden md:col-span-2">
           <Image src="/Heritage.png" alt="Heritage" fill className="h-full w-full object-cover" />
         </div>
 
@@ -179,7 +180,7 @@ const Heritage: React.FC = () => (
 // ─── BESPOKE ─────────────────────────────────────────────────────────────────
 const Bespoke: React.FC = () => (
   <section className="bg-[#FFF8F7] py-0">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className=" mx-auto px-4 sm:px-6 lg:px-8">
       <div className="grid md:grid-cols-3 gap-2 items-stretch">
         {/* Ring image */}
         <div className="relative aspect-[4/3] md:aspect-auto bg-[#111] flex items-center justify-center overflow-hidden order-2 md:order-1">
@@ -187,7 +188,7 @@ const Bespoke: React.FC = () => (
         </div>
 
         {/* Text panel */}
-        <div className="relative bg-[#7D0005] p-10 lg:p-14 flex flex-col justify-center overflow-hidden order-1 md:order-2 col-span-2">
+        <div className="relative bg-[#7D0005] p-10 lg:p-14 flex flex-col justify-center overflow-hidden order-1 md:order-2 md:col-span-2">
           {/* Background star motif */}
           <div className="absolute right-6 top-6 opacity-10">
             <Star size={120} className="text-white" fill="white" />
@@ -215,15 +216,16 @@ const Bespoke: React.FC = () => (
 // ─── WEDDING ─────────────────────────────────────────────────────────────────
 const Wedding: React.FC = () => (
   <section className="bg-[#FFF8F7] py-20 lg:py-28">
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div className="grid md:grid-cols-2 gap-10 lg:gap-20 items-center">
+    <div className=" mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="grid md:grid-cols-2 gap-10 lg:gap-20 justify-between items-stretch">
         {/* Bride image */}
-        <div className="relative aspect-[3/4] bg-[#1C1C1C] flex items-center justify-center overflow-hidden">
+        <div className="relative aspect-square rounded-3xl bg-[#1C1C1C] flex items-center justify-center overflow-hidden">
           <Image src="/Bridal.png" alt="Heritage" fill className="h-full w-full object-cover" />
         </div>
 
         {/* Text */}
-        <div>
+        <div className="place-items-center mt-2">
+          <div>
           <p className="text-[10px] tracking-[0.35em] uppercase text-[#C9A84C] font-semibold mb-4">
             Wedding Store
           </p>
@@ -232,7 +234,7 @@ const Wedding: React.FC = () => (
             <br />
             Infinite Radiance
           </h2>
-          <p className="text-[#6B6158] text-sm lg:text-base leading-relaxed mb-10">
+          <p className="text-[#5B403D] max-w-sm text-sm lg:text-base leading-relaxed mb-10">
             For the most significant day of your life, we craft heirlooms that
             bridge tradition and modernity. Each bridal set is a masterpiece of
             storytelling.
@@ -273,6 +275,7 @@ const Wedding: React.FC = () => (
           >
             Explore Bridal <ArrowRight size={14} />
           </a> */}
+        </div>
         </div>
       </div>
     </div>
@@ -346,7 +349,7 @@ const Store: React.FC = () => (
         </div>
 
         {/* Store image placeholder */}
-        <div className="relative aspect-[4/3] bg-[#1C1C1C] flex items-center justify-center overflow-hidden">
+        <div className="relative aspect-video bg-[#1C1C1C] flex items-center justify-center overflow-hidden">
           <Image src="/Shop-Location.png" alt="Heritage" fill className="h-full w-full object-cover" />
         </div>
       </div>
@@ -387,7 +390,7 @@ const HomePage: React.FC = () => (
     <Heritage />
     <Bespoke />
     <Wedding />
-    <Store />
+    <LocationSection />
     <Footer />
   </main>
 );

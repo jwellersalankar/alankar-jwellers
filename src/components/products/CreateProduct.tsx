@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, RefObject, useRef } from "react";
 import {
   Tag,
   Weight,
@@ -19,13 +19,20 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Barcode,
 } from "lucide-react";
 import { IPRODUCTS } from "@/src/models/Product";
 import axios from "axios";
+import { Camera } from "lucide-react";
 
+import { useBarcodeScanner } from "@/src/hooks/useBarcodeScanner";
+
+import { useDevice } from "@/src/hooks/useDevice";
+
+import BarcodeScannerModal from "@/src/components/products/BarcodeScannerModal";
 // ── Types ──────────────────────────────────────────────
 type ProductType = "Gold" | "Silver" | "Other";
-type Purity      = "18k" | "22k" | "24k" | "Other";
+type Purity = "18k" | "22k" | "24k" | "Other";
 
 type ProductForm = {
   // Purchase / Invoice fields
@@ -33,7 +40,7 @@ type ProductForm = {
   invoiceNumber: string;
   invoiceDate: string;
   isGSTBill: boolean;
-  isInterState: boolean;   // true → server computes IGST; false → CGST+SGST
+  isInterState: boolean; // true → server computes IGST; false → CGST+SGST
   // Item fields
   name: string;
   description: string;
@@ -44,23 +51,37 @@ type ProductForm = {
   purity: Purity | "";
   huid: string;
   hsn: string;
+  barcode: string;
   quantity: string;
   // GST rates only — server calculates actual tax amounts
-  gstRateMetal: string;    // default 3
-  gstRateMaking: string;   // default 5
+  gstRateMetal: string; // default 3
+  gstRateMaking: string; // default 5
 };
 
 type FieldError = Partial<Record<keyof ProductForm, string>>;
 
-const TYPES: ProductType[]  = ["Gold", "Silver", "Other"];
-const PURITIES: Purity[]    = ["18k", "22k", "24k", "Other"];
+const TYPES: ProductType[] = ["Gold", "Silver", "Other"];
+const PURITIES: Purity[] = ["18k", "22k", "24k", "Other"];
 
 const EMPTY_FORM: ProductForm = {
-  supplierGSTIN: "", invoiceNumber: "", invoiceDate: "",
-  isGSTBill: true, isInterState: false,
-  name: "", description: "", weight: "", metalValue: "", makingCharge: "",
-  type: "", purity: "", huid: "", hsn: "", quantity: "",
-  gstRateMetal: "3", gstRateMaking: "5",
+  supplierGSTIN: "",
+  invoiceNumber: "",
+  invoiceDate: "",
+  isGSTBill: true,
+  isInterState: false,
+  name: "",
+  description: "",
+  weight: "",
+  metalValue: "",
+  makingCharge: "",
+  type: "",
+  purity: "",
+  huid: "",
+  hsn: "",
+  barcode: "",
+  quantity: "",
+  gstRateMetal: "3",
+  gstRateMaking: "5",
 };
 
 // ── Sub-components ─────────────────────────────────────
@@ -69,7 +90,11 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     <div className="flex items-center gap-3 mb-4 sm:mb-5">
       <p
         className="text-[#8B6914] tracking-[0.16em] uppercase whitespace-nowrap"
-        style={{ fontFamily: "'Georgia', serif", fontSize: "10px", fontWeight: 700 }}
+        style={{
+          fontFamily: "'Georgia', serif",
+          fontSize: "10px",
+          fontWeight: 700,
+        }}
       >
         {children}
       </p>
@@ -79,28 +104,45 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function FieldWrapper({
-  label, error, required, children, hint,
+  label,
+  error,
+  required,
+  children,
+  hint,
 }: {
-  label: string; error?: string; required?: boolean;
-  children: React.ReactNode; hint?: string;
+  label: string;
+  error?: string;
+  required?: boolean;
+  children: React.ReactNode;
+  hint?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label
         className="flex items-center gap-1 text-[#9E8A7E] tracking-[0.12em] uppercase"
-        style={{ fontFamily: "'Georgia', serif", fontSize: "10px", fontWeight: 600 }}
+        style={{
+          fontFamily: "'Georgia', serif",
+          fontSize: "10px",
+          fontWeight: 600,
+        }}
       >
         {label}
         {required && <span className="text-[#8B2020]">*</span>}
         {hint && (
-          <span className="normal-case tracking-normal text-[#C8B8A8] ml-1" style={{ fontSize: "9px" }}>
+          <span
+            className="normal-case tracking-normal text-[#C8B8A8] ml-1"
+            style={{ fontSize: "9px" }}
+          >
             ({hint})
           </span>
         )}
       </label>
       {children}
       {error && (
-        <p className="text-[#C0392B] flex items-center gap-1" style={{ fontFamily: "'Georgia', serif", fontSize: "11px" }}>
+        <p
+          className="text-[#C0392B] flex items-center gap-1"
+          style={{ fontFamily: "'Georgia', serif", fontSize: "11px" }}
+        >
           <AlertCircle size={10} strokeWidth={2} />
           {error}
         </p>
@@ -110,18 +152,45 @@ function FieldWrapper({
 }
 
 function InputField({
-  icon, placeholder, value, onChange, type = "text", hasError, readOnly,
+  icon,
+  placeholder,
+  value,
+  onChange,
+  type = "text",
+  hasError,
+  readOnly,
+
+  // NEW PROPERTIES
+  rightIcon,
+  onRightIconClick,
+  inputRef,
 }: {
-  icon: React.ReactNode; placeholder: string; value: string;
-  onChange: (v: string) => void; type?: string; hasError?: boolean; readOnly?: boolean;
+  icon: React.ReactNode;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  hasError?: boolean;
+  readOnly?: boolean;
+
+  rightIcon?: React.ReactNode;
+  onRightIconClick?: () => void;
+  inputRef?: React.Ref<HTMLInputElement>;
 }) {
   return (
-    <div className={`flex items-center gap-2.5 bg-white border rounded-md px-3 sm:px-3.5 py-2.5 transition-colors duration-200 ${
-      readOnly ? "bg-[#FAF6F1] cursor-not-allowed" :
-      hasError ? "border-[#C0392B]" : "border-[#DDD0C4] focus-within:border-[#8B6914]"
-    }`}>
+    <div
+      className={`flex items-center gap-2.5 bg-white border rounded-md px-3 sm:px-3.5 py-2.5 transition-colors duration-200 ${
+        readOnly
+          ? "bg-[#FAF6F1] cursor-not-allowed"
+          : hasError
+            ? "border-[#C0392B]"
+            : "border-[#DDD0C4] focus-within:border-[#8B6914]"
+      }`}
+    >
       <span className="text-[#B8A898] flex-shrink-0">{icon}</span>
+
       <input
+        ref={inputRef}
         type={type}
         placeholder={placeholder}
         value={value}
@@ -130,20 +199,43 @@ function InputField({
         className="flex-1 bg-transparent text-[#3D2B1F] placeholder-[#C8B8A8] text-[13px] focus:outline-none min-w-0"
         style={{ fontFamily: "'Georgia', serif" }}
       />
+
+      {rightIcon && (
+        <button
+          type="button"
+          onClick={onRightIconClick}
+          className="flex items-center justify-center text-[#8B6914] hover:text-[#6B1A1A] transition-all duration-200 hover:scale-110"
+        >
+          {rightIcon}
+        </button>
+      )}
     </div>
   );
 }
 
 function SelectField({
-  icon, value, onChange, options, placeholder, hasError,
+  icon,
+  value,
+  onChange,
+  options,
+  placeholder,
+  hasError,
 }: {
-  icon: React.ReactNode; value: string; onChange: (v: string) => void;
-  options: string[]; placeholder: string; hasError?: boolean;
+  icon: React.ReactNode;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+  placeholder: string;
+  hasError?: boolean;
 }) {
   return (
-    <div className={`flex items-center gap-2.5 bg-white border rounded-md px-3 sm:px-3.5 py-2.5 transition-colors duration-200 ${
-      hasError ? "border-[#C0392B]" : "border-[#DDD0C4] focus-within:border-[#8B6914]"
-    }`}>
+    <div
+      className={`flex items-center gap-2.5 bg-white border rounded-md px-3 sm:px-3.5 py-2.5 transition-colors duration-200 ${
+        hasError
+          ? "border-[#C0392B]"
+          : "border-[#DDD0C4] focus-within:border-[#8B6914]"
+      }`}
+    >
       <span className="text-[#B8A898] flex-shrink-0">{icon}</span>
       <select
         value={value}
@@ -151,23 +243,43 @@ function SelectField({
         className="flex-1 bg-transparent text-[#3D2B1F] text-[13px] focus:outline-none appearance-none cursor-pointer min-w-0"
         style={{ fontFamily: "'Georgia', serif" }}
       >
-        <option value="" disabled>{placeholder}</option>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+        <option value="" disabled>
+          {placeholder}
+        </option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
       </select>
-      <ChevronDown size={13} strokeWidth={1.8} className="text-[#9E8A7E] flex-shrink-0 pointer-events-none" />
+      <ChevronDown
+        size={13}
+        strokeWidth={1.8}
+        className="text-[#9E8A7E] flex-shrink-0 pointer-events-none"
+      />
     </div>
   );
 }
 
 // Toggle switch for GST bill
 function ToggleField({
-  label, value, onChange,
-}: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
   return (
     <div className="flex items-center justify-between">
       <label
         className="text-[#9E8A7E] tracking-[0.12em] uppercase"
-        style={{ fontFamily: "'Georgia', serif", fontSize: "10px", fontWeight: 600 }}
+        style={{
+          fontFamily: "'Georgia', serif",
+          fontSize: "10px",
+          fontWeight: 600,
+        }}
       >
         {label}
       </label>
@@ -190,19 +302,95 @@ interface CreateProductModalProps {
   onSave?: (data: IPRODUCTS) => void;
 }
 
-export default function CreateProductModal({ onClose, onSave }: CreateProductModalProps) {
-  const [form, setForm]       = useState<ProductForm>(EMPTY_FORM);
-  const [errors, setErrors]   = useState<FieldError>({});
+export default function CreateProductModal({
+  onClose,
+  onSave,
+}: CreateProductModalProps) {
+  const [form, setForm] = useState<ProductForm>(EMPTY_FORM);
+  const [errors, setErrors] = useState<FieldError>({});
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [scanSuccess, setScanSuccess] = useState(false);
 
   // Derive: if HUID is filled, quantity must be 1
   const isHUID = form.huid.trim().length > 0;
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+
+  const { isMobile } = useDevice();
+
+  const {
+     videoRef,
+    isOpen,
+    loading: scannerLoading,
+    error: scannerError,
+    startScanner,
+    stopScanner,
+    switchCamera,
+    devices,
+  } = useBarcodeScanner((barcode) => {
+    set("barcode", barcode);
+
+    setScanSuccess(true);
+
+    setTimeout(() => {
+      setScanSuccess(false);
+    }, 1500);
+  });
+
+  useEffect(() => {
+    if (isMobile) return;
+
+    let buffer = "";
+
+    let timeout: NodeJS.Timeout;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        if (buffer.length >= 4) {
+          set("barcode", buffer);
+
+          barcodeInputRef.current?.focus();
+        }
+
+        buffer = "";
+
+        return;
+      }
+
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+
+      clearTimeout(timeout);
+
+      timeout = setTimeout(() => {
+        buffer = "";
+      }, 100);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMobile]);
+
+  const handleBarcodeClick = () => {
+    if (isMobile) {
+      startScanner();
+
+      return;
+    }
+
+    barcodeInputRef.current?.focus();
+  };
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, []);
 
   // Auto-lock quantity to 1 when HUID is entered
@@ -222,25 +410,38 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
     const e: FieldError = {};
 
     // Invoice fields
-    if (!form.invoiceNumber.trim()) e.invoiceNumber = "Invoice number is required.";
-    if (!form.invoiceDate)          e.invoiceDate   = "Invoice date is required.";
+    if (!form.invoiceNumber.trim())
+      e.invoiceNumber = "Invoice number is required.";
+    if (!form.invoiceDate) e.invoiceDate = "Invoice date is required.";
 
     // Item fields
     if (!form.name.trim()) e.name = "Product name is required.";
-    if (!form.hsn.trim())  e.hsn  = "HSN code is required.";
-    if (!form.type)        e.type = "Select a product type.";
-    if (!form.purity)      e.purity = "Select a purity grade.";
+    if (!form.hsn.trim()) e.hsn = "HSN code is required.";
+    if (!form.type) e.type = "Select a product type.";
+    if (!form.purity) e.purity = "Select a purity grade.";
 
     if (!form.weight || isNaN(Number(form.weight)) || Number(form.weight) <= 0)
       e.weight = "Enter a valid weight.";
-    if (!form.metalValue || isNaN(Number(form.metalValue)) || Number(form.metalValue) <= 0)
+    if (
+      !form.metalValue ||
+      isNaN(Number(form.metalValue)) ||
+      Number(form.metalValue) <= 0
+    )
       e.metalValue = "Enter a valid metal value.";
-    if (!form.makingCharge || isNaN(Number(form.makingCharge)) || Number(form.makingCharge) < 0)
+    if (
+      !form.makingCharge ||
+      isNaN(Number(form.makingCharge)) ||
+      Number(form.makingCharge) < 0
+    )
       e.makingCharge = "Enter a valid making charge.";
 
     // Quantity required only when no HUID
     if (!isHUID) {
-      if (!form.quantity || isNaN(Number(form.quantity)) || Number(form.quantity) < 1)
+      if (
+        !form.quantity ||
+        isNaN(Number(form.quantity)) ||
+        Number(form.quantity) < 1
+      )
         e.quantity = "Quantity is required for non-HUID products.";
     }
 
@@ -256,24 +457,25 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
 
     try {
       const payload = {
-        supplierGSTIN:  form.supplierGSTIN.trim() || undefined,
-        invoiceNumber:  form.invoiceNumber.trim(),
-        invoiceDate:    form.invoiceDate,
-        isGSTBill:      form.isGSTBill,
-        isInterState:   form.isInterState,   // drives server GST split
+        supplierGSTIN: form.supplierGSTIN.trim() || undefined,
+        invoiceNumber: form.invoiceNumber.trim(),
+        invoiceDate: form.invoiceDate,
+        isGSTBill: form.isGSTBill,
+        isInterState: form.isInterState, // drives server GST split
         item: {
-          name:          form.name.trim(),
-          description:   form.description.trim() || undefined,
-          weight:        Number(form.weight),
-          metalValue:    Number(form.metalValue),
-          makingCharge:  Number(form.makingCharge),
-          type:          form.type,
-          purity:        form.purity,
-          hsn:           form.hsn.trim(),
-          huid:          form.huid.trim() || undefined,
-          quantity:      isHUID ? 1 : Number(form.quantity),
-          gstRateMetal:  Number(form.gstRateMetal) || 3,   // server uses this
-          gstRateMaking: Number(form.gstRateMaking) || 5,  // server uses this
+          name: form.name.trim(),
+          description: form.description.trim() || undefined,
+          weight: Number(form.weight),
+          metalValue: Number(form.metalValue),
+          makingCharge: Number(form.makingCharge),
+          type: form.type,
+          purity: form.purity,
+          hsn: form.hsn.trim(),
+          huid: form.huid.trim() || undefined,
+          barcode: form.barcode.trim() || undefined,
+          quantity: isHUID ? 1 : Number(form.quantity),
+          gstRateMetal: Number(form.gstRateMetal) || 3, // server uses this
+          gstRateMaking: Number(form.gstRateMaking) || 5, // server uses this
         },
       };
 
@@ -288,7 +490,9 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
         setApiError(response.data.error || "Failed to add product.");
       }
     } catch (err: any) {
-      setApiError(err?.response?.data?.error || err.message || "Unexpected error.");
+      setApiError(
+        err?.response?.data?.error || err.message || "Unexpected error.",
+      );
     } finally {
       setLoading(false);
     }
@@ -304,7 +508,10 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 py-4 sm:py-6"
-      style={{ background: "rgba(14, 8, 4, 0.80)", backdropFilter: "blur(2px)" }}
+      style={{
+        background: "rgba(14, 8, 4, 0.80)",
+        backdropFilter: "blur(2px)",
+      }}
       onClick={(e) => e.target === e.currentTarget && !loading && onClose?.()}
     >
       {/* ── Modal Card ── */}
@@ -327,13 +534,21 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
 
           <p
             className="text-[#8B6914] tracking-[0.18em] uppercase mb-1.5"
-            style={{ fontFamily: "'Georgia', serif", fontSize: "10px", fontWeight: 700 }}
+            style={{
+              fontFamily: "'Georgia', serif",
+              fontSize: "10px",
+              fontWeight: 700,
+            }}
           >
             Inventory Management
           </p>
           <h2
             className="text-[#2C1A0E]"
-            style={{ fontFamily: "'Georgia', 'Times New Roman', serif", fontSize: "clamp(18px, 2.5vw, 24px)", fontWeight: 400 }}
+            style={{
+              fontFamily: "'Georgia', 'Times New Roman', serif",
+              fontSize: "clamp(18px, 2.5vw, 24px)",
+              fontWeight: 400,
+            }}
           >
             Add New Product
           </h2>
@@ -342,15 +557,17 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
 
         {/* ── Scrollable Form Body ── */}
         <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-5 sm:py-7 flex flex-col gap-6 sm:gap-7 bg-white">
-
           {/* ── Section 1: Purchase / Invoice ── */}
           <div>
             <SectionTitle>Purchase / Invoice Details</SectionTitle>
             <div className="flex flex-col gap-4">
-
               {/* Invoice No + Date — 2 cols on sm+ */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FieldWrapper label="Invoice Number" required error={errors.invoiceNumber}>
+                <FieldWrapper
+                  label="Invoice Number"
+                  required
+                  error={errors.invoiceNumber}
+                >
                   <InputField
                     icon={<ReceiptText size={15} strokeWidth={1.6} />}
                     placeholder="e.g. INV-2024-001"
@@ -360,7 +577,11 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
                   />
                 </FieldWrapper>
 
-                <FieldWrapper label="Invoice Date" required error={errors.invoiceDate}>
+                <FieldWrapper
+                  label="Invoice Date"
+                  required
+                  error={errors.invoiceDate}
+                >
                   <InputField
                     icon={<CalendarDays size={15} strokeWidth={1.6} />}
                     placeholder="DD/MM/YYYY"
@@ -374,7 +595,11 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
 
               {/* Supplier GSTIN + GST Bill toggle */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <FieldWrapper label="Supplier GSTIN" hint="optional" error={errors.supplierGSTIN}>
+                <FieldWrapper
+                  label="Supplier GSTIN"
+                  hint="optional"
+                  error={errors.supplierGSTIN}
+                >
                   <InputField
                     icon={<Building2 size={15} strokeWidth={1.6} />}
                     placeholder="e.g. 27AAPFU0939F1ZV"
@@ -411,14 +636,21 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
 
               <FieldWrapper label="Description" hint="optional">
                 <div className="flex items-start gap-2.5 bg-white border border-[#DDD0C4] rounded-md px-3 sm:px-3.5 py-2.5 focus-within:border-[#8B6914] transition-colors duration-200">
-                  <FileText size={15} strokeWidth={1.6} className="text-[#B8A898] flex-shrink-0 mt-0.5" />
+                  <FileText
+                    size={15}
+                    strokeWidth={1.6}
+                    className="text-[#B8A898] flex-shrink-0 mt-0.5"
+                  />
                   <textarea
                     placeholder="Describe the craftsmanship, design, and heritage..."
                     value={form.description}
                     onChange={(e) => set("description", e.target.value)}
                     rows={2}
                     className="flex-1 bg-transparent text-[#3D2B1F] placeholder-[#C8B8A8] text-[13px] focus:outline-none resize-none"
-                    style={{ fontFamily: "'Georgia', serif", lineHeight: "1.7" }}
+                    style={{
+                      fontFamily: "'Georgia', serif",
+                      lineHeight: "1.7",
+                    }}
                   />
                 </div>
               </FieldWrapper>
@@ -460,6 +692,38 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
                   hasError={!!errors.hsn}
                 />
               </FieldWrapper>
+
+              <FieldWrapper
+                label="Barcode"
+                hint={
+                  isMobile ? "Tap camera to scan" : "USB / Bluetooth Scanner"
+                }
+                error={errors.barcode}
+              >
+                <InputField
+                  inputRef={barcodeInputRef}
+                  icon={<Barcode size={15} strokeWidth={1.6} />}
+                  placeholder="Scan or enter barcode"
+                  value={form.barcode}
+                  onChange={(v) => set("barcode", v)}
+                  hasError={!!errors.barcode}
+                  rightIcon={<Camera size={18} strokeWidth={2} />}
+                  onRightIconClick={handleBarcodeClick}
+                />
+              </FieldWrapper>
+
+              {scanSuccess && (
+                <div
+                  className="mt-2 flex items-center gap-2 text-[#2E7D32]"
+                  style={{
+                    fontFamily: "Georgia",
+                    fontSize: 12,
+                  }}
+                >
+                  <CheckCircle2 size={14} />
+                  Barcode scanned successfully
+                </div>
+              )}
             </div>
           </div>
 
@@ -478,7 +742,12 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
                 />
               </FieldWrapper>
 
-              <FieldWrapper label="Metal Value (₹)" required error={errors.metalValue} hint="excl. making">
+              <FieldWrapper
+                label="Metal Value (₹)"
+                required
+                error={errors.metalValue}
+                hint="excl. making"
+              >
                 <InputField
                   icon={<IndianRupee size={15} strokeWidth={1.6} />}
                   placeholder="e.g. 120000"
@@ -489,7 +758,11 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
                 />
               </FieldWrapper>
 
-              <FieldWrapper label="Making Charge (₹)" required error={errors.makingCharge}>
+              <FieldWrapper
+                label="Making Charge (₹)"
+                required
+                error={errors.makingCharge}
+              >
                 <InputField
                   icon={<IndianRupee size={15} strokeWidth={1.6} />}
                   placeholder="e.g. 14500"
@@ -506,7 +779,11 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
           <div>
             <SectionTitle>Inventory & Certification</SectionTitle>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FieldWrapper label="HUID (Hallmark Unique ID)" hint="leave empty for bulk" error={errors.huid}>
+              <FieldWrapper
+                label="HUID (Hallmark Unique ID)"
+                hint="leave empty for bulk"
+                error={errors.huid}
+              >
                 <InputField
                   icon={<Hash size={15} strokeWidth={1.6} />}
                   placeholder="e.g. AB1234CD"
@@ -548,9 +825,15 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
                 <div>
                   <p
                     className="text-[#5C4A3A]"
-                    style={{ fontFamily: "'Georgia', serif", fontSize: "13px", fontWeight: 600 }}
+                    style={{
+                      fontFamily: "'Georgia', serif",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                    }}
                   >
-                    {form.isInterState ? "Inter-State Supply" : "Intra-State Supply"}
+                    {form.isInterState
+                      ? "Inter-State Supply"
+                      : "Intra-State Supply"}
                   </p>
                   <p
                     className="text-[#9E8A7E]"
@@ -572,7 +855,11 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <FieldWrapper label="Metal GST Rate %" hint="default 3">
                   <div className="flex items-center gap-2 bg-white border border-[#DDD0C4] rounded-md px-3 sm:px-3.5 py-2.5 focus-within:border-[#8B6914] transition-colors duration-200">
-                    <IndianRupee size={14} strokeWidth={1.6} className="text-[#B8A898] flex-shrink-0" />
+                    <IndianRupee
+                      size={14}
+                      strokeWidth={1.6}
+                      className="text-[#B8A898] flex-shrink-0"
+                    />
                     <input
                       type="number"
                       placeholder="3"
@@ -581,13 +868,25 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
                       className="flex-1 bg-transparent text-[#3D2B1F] placeholder-[#C8B8A8] text-[13px] focus:outline-none min-w-0"
                       style={{ fontFamily: "'Georgia', serif" }}
                     />
-                    <span className="text-[#9E8A7E] flex-shrink-0" style={{ fontFamily: "'Georgia', serif", fontSize: "11px" }}>%</span>
+                    <span
+                      className="text-[#9E8A7E] flex-shrink-0"
+                      style={{
+                        fontFamily: "'Georgia', serif",
+                        fontSize: "11px",
+                      }}
+                    >
+                      %
+                    </span>
                   </div>
                 </FieldWrapper>
 
                 <FieldWrapper label="Making Charge GST Rate %" hint="default 5">
                   <div className="flex items-center gap-2 bg-white border border-[#DDD0C4] rounded-md px-3 sm:px-3.5 py-2.5 focus-within:border-[#8B6914] transition-colors duration-200">
-                    <IndianRupee size={14} strokeWidth={1.6} className="text-[#B8A898] flex-shrink-0" />
+                    <IndianRupee
+                      size={14}
+                      strokeWidth={1.6}
+                      className="text-[#B8A898] flex-shrink-0"
+                    />
                     <input
                       type="number"
                       placeholder="5"
@@ -596,7 +895,15 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
                       className="flex-1 bg-transparent text-[#3D2B1F] placeholder-[#C8B8A8] text-[13px] focus:outline-none min-w-0"
                       style={{ fontFamily: "'Georgia', serif" }}
                     />
-                    <span className="text-[#9E8A7E] flex-shrink-0" style={{ fontFamily: "'Georgia', serif", fontSize: "11px" }}>%</span>
+                    <span
+                      className="text-[#9E8A7E] flex-shrink-0"
+                      style={{
+                        fontFamily: "'Georgia', serif",
+                        fontSize: "11px",
+                      }}
+                    >
+                      %
+                    </span>
                   </div>
                 </FieldWrapper>
               </div>
@@ -608,28 +915,63 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
                   style={{ border: "1px solid #E8DDD4" }}
                 >
                   {(() => {
-                    const qty         = isHUID ? 1 : (Number(form.quantity) || 1);
-                    const metal       = (Number(form.metalValue) || 0) * qty;
-                    const making      = (Number(form.makingCharge) || 0) * qty;
-                    const rMetal      = Number(form.gstRateMetal) || 3;
-                    const rMaking     = Number(form.gstRateMaking) || 5;
-                    const totalTax    = (metal * rMetal / 100) + (making * rMaking / 100);
-                    const igst        = form.isInterState ? totalTax : 0;
-                    const cgst        = form.isInterState ? 0 : totalTax / 2;
-                    const sgst        = cgst;
+                    const qty = isHUID ? 1 : Number(form.quantity) || 1;
+                    const metal = (Number(form.metalValue) || 0) * qty;
+                    const making = (Number(form.makingCharge) || 0) * qty;
+                    const rMetal = Number(form.gstRateMetal) || 3;
+                    const rMaking = Number(form.gstRateMaking) || 5;
+                    const totalTax =
+                      (metal * rMetal) / 100 + (making * rMaking) / 100;
+                    const igst = form.isInterState ? totalTax : 0;
+                    const cgst = form.isInterState ? 0 : totalTax / 2;
+                    const sgst = cgst;
                     return (
                       <div className="grid grid-cols-3 divide-x divide-[#E8DDD4]">
                         {[
-                          { label: form.isInterState ? "IGST" : "CGST", value: form.isInterState ? igst : cgst, color: "#8B2020" },
-                          { label: form.isInterState ? "—"   : "SGST",  value: form.isInterState ? 0    : sgst, color: "#8B6914" },
-                          { label: "Total GST",                          value: totalTax,                        color: "#2C1A0E" },
+                          {
+                            label: form.isInterState ? "IGST" : "CGST",
+                            value: form.isInterState ? igst : cgst,
+                            color: "#8B2020",
+                          },
+                          {
+                            label: form.isInterState ? "—" : "SGST",
+                            value: form.isInterState ? 0 : sgst,
+                            color: "#8B6914",
+                          },
+                          {
+                            label: "Total GST",
+                            value: totalTax,
+                            color: "#2C1A0E",
+                          },
                         ].map((r) => (
-                          <div key={r.label} className="flex flex-col items-center py-3 px-2 bg-[#FAF6F1]">
-                            <p style={{ fontFamily: "'Georgia', serif", fontSize: "9px", color: "#9E8A7E", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                          <div
+                            key={r.label}
+                            className="flex flex-col items-center py-3 px-2 bg-[#FAF6F1]"
+                          >
+                            <p
+                              style={{
+                                fontFamily: "'Georgia', serif",
+                                fontSize: "9px",
+                                color: "#9E8A7E",
+                                fontWeight: 700,
+                                letterSpacing: "0.1em",
+                                textTransform: "uppercase",
+                              }}
+                            >
                               {r.label}
                             </p>
-                            <p style={{ fontFamily: "'Georgia', serif", fontSize: "14px", fontWeight: 700, color: r.color }}>
-                              ₹{r.value.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                            <p
+                              style={{
+                                fontFamily: "'Georgia', serif",
+                                fontSize: "14px",
+                                fontWeight: 700,
+                                color: r.color,
+                              }}
+                            >
+                              ₹
+                              {r.value.toLocaleString("en-IN", {
+                                minimumFractionDigits: 2,
+                              })}
                             </p>
                           </div>
                         ))}
@@ -645,21 +987,35 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
           {(form.metalValue || form.makingCharge) && (
             <div
               className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 rounded-lg"
-              style={{ background: "linear-gradient(135deg, #FDF3DC 0%, #F5E8B0 100%)", border: "1px solid #E8D080" }}
+              style={{
+                background: "linear-gradient(135deg, #FDF3DC 0%, #F5E8B0 100%)",
+                border: "1px solid #E8D080",
+              }}
             >
               <p
                 className="text-[#7A5C00] tracking-[0.1em] uppercase"
-                style={{ fontFamily: "'Georgia', serif", fontSize: "9px", fontWeight: 700 }}
+                style={{
+                  fontFamily: "'Georgia', serif",
+                  fontSize: "9px",
+                  fontWeight: 700,
+                }}
               >
-                Total Item Value{isHUID ? "" : form.quantity ? ` × ${form.quantity}` : ""}
+                Total Item Value
+                {isHUID ? "" : form.quantity ? ` × ${form.quantity}` : ""}
               </p>
               <p
                 className="text-[#4A3000]"
-                style={{ fontFamily: "'Georgia', serif", fontSize: "16px", fontWeight: 700 }}
+                style={{
+                  fontFamily: "'Georgia', serif",
+                  fontSize: "16px",
+                  fontWeight: 700,
+                }}
               >
-                ₹{(
-                  ((Number(form.metalValue) || 0) + (Number(form.makingCharge) || 0)) *
-                  (isHUID ? 1 : (Number(form.quantity) || 1))
+                ₹
+                {(
+                  ((Number(form.metalValue) || 0) +
+                    (Number(form.makingCharge) || 0)) *
+                  (isHUID ? 1 : Number(form.quantity) || 1)
                 ).toLocaleString("en-IN")}
               </p>
             </div>
@@ -668,8 +1024,15 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
           {/* Success banner */}
           {success && (
             <div className="bg-[#F0FBF4] border border-[#4CAF50]/30 rounded-md px-4 py-3 flex items-center gap-2">
-              <CheckCircle2 size={15} strokeWidth={2} className="text-[#2E7D32] flex-shrink-0" />
-              <p className="text-[#2E7D32]" style={{ fontFamily: "'Georgia', serif", fontSize: "13px" }}>
+              <CheckCircle2
+                size={15}
+                strokeWidth={2}
+                className="text-[#2E7D32] flex-shrink-0"
+              />
+              <p
+                className="text-[#2E7D32]"
+                style={{ fontFamily: "'Georgia', serif", fontSize: "13px" }}
+              >
                 Product added successfully. Closing…
               </p>
             </div>
@@ -678,8 +1041,15 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
           {/* API error banner */}
           {apiError && (
             <div className="bg-[#FDF0F0] border border-[#E8A0A8] rounded-md px-4 py-3 flex items-center gap-2">
-              <AlertCircle size={15} strokeWidth={2} className="text-[#8B2020] flex-shrink-0" />
-              <p className="text-[#8B2020]" style={{ fontFamily: "'Georgia', serif", fontSize: "13px" }}>
+              <AlertCircle
+                size={15}
+                strokeWidth={2}
+                className="text-[#8B2020] flex-shrink-0"
+              />
+              <p
+                className="text-[#8B2020]"
+                style={{ fontFamily: "'Georgia', serif", fontSize: "13px" }}
+              >
                 {apiError}
               </p>
             </div>
@@ -692,7 +1062,11 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
             onClick={handleReset}
             disabled={loading}
             className="text-[#9E8A7E] hover:text-[#5C3D2E] tracking-[0.12em] uppercase transition-colors duration-200 disabled:opacity-40"
-            style={{ fontFamily: "'Georgia', serif", fontSize: "11px", fontWeight: 600 }}
+            style={{
+              fontFamily: "'Georgia', serif",
+              fontSize: "11px",
+              fontWeight: 600,
+            }}
           >
             Reset
           </button>
@@ -702,7 +1076,11 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
               onClick={() => !loading && onClose?.()}
               disabled={loading}
               className="text-[#9E8A7E] hover:text-[#5C3D2E] tracking-[0.12em] uppercase transition-colors duration-200 disabled:opacity-40 hidden sm:block"
-              style={{ fontFamily: "'Georgia', serif", fontSize: "11px", fontWeight: 600 }}
+              style={{
+                fontFamily: "'Georgia', serif",
+                fontSize: "11px",
+                fontWeight: 600,
+              }}
             >
               Cancel
             </button>
@@ -710,16 +1088,39 @@ export default function CreateProductModal({ onClose, onSave }: CreateProductMod
               onClick={handleSubmit}
               disabled={loading || success}
               className="flex items-center gap-2 bg-[#6B1A1A] hover:bg-[#521414] disabled:opacity-60 disabled:cursor-not-allowed text-white px-5 sm:px-8 py-3 sm:py-3.5 rounded-md tracking-[0.16em] uppercase transition-colors duration-200"
-              style={{ fontFamily: "'Georgia', serif", fontSize: "12px", fontWeight: 700 }}
+              style={{
+                fontFamily: "'Georgia', serif",
+                fontSize: "12px",
+                fontWeight: 700,
+              }}
             >
-              {loading
-                ? <><Loader2 size={14} strokeWidth={2.5} className="animate-spin" /> Saving…</>
-                : <><Plus size={14} strokeWidth={2.5} /> Add Product</>
-              }
+              {loading ? (
+                <>
+                  <Loader2
+                    size={14}
+                    strokeWidth={2.5}
+                    className="animate-spin"
+                  />{" "}
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <Plus size={14} strokeWidth={2.5} /> Add Product
+                </>
+              )}
             </button>
           </div>
         </div>
       </div>
+      <BarcodeScannerModal
+          open={isOpen}
+          loading={scannerLoading}
+          error={scannerError}
+          videoRef={videoRef as RefObject<HTMLVideoElement>}
+          onClose={stopScanner}
+          switchCamera={switchCamera}
+          cameraCount={devices?.length}
+      />
     </div>
   );
 }

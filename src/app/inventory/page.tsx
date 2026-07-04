@@ -40,46 +40,6 @@ type InventoryItem = {
   makingCharge: number;
 };
 
-// ── Mock Data ──────────────────────────────────────────
-const mockItems: InventoryItem[] = [
-  {
-    id: "#GN-1131",
-    productName: "Maharaja Filigree Necklace",
-    purity: "22k Gold",
-    type: "Necklace",
-    weightG: 42.5,
-    hsnCode: "71131910",
-    makingCharge: 14500,
-  },
-  {
-    id: "#RG-4421",
-    productName: "Celestial Solitaire Ring",
-    purity: "22k Gold",
-    type: "Ring",
-    weightG: 6.25,
-    hsnCode: "71131920",
-    makingCharge: 3200,
-  },
-  {
-    id: "#BG-0012",
-    productName: "Antique Temple Bangles",
-    purity: "22k Gold",
-    type: "Bangles",
-    weightG: 38.9,
-    hsnCode: "71131910",
-    makingCharge: 11000,
-  },
-  {
-    id: "#ER-8829",
-    productName: "Emerald Drop Jhumkas",
-    purity: "22k Gold",
-    type: "Earrings",
-    weightG: 18.45,
-    hsnCode: "71131910",
-    makingCharge: 6800,
-  },
-];
-
 const PURITY_OPTIONS = ["All Purity", "22k", "18k", "24k", "Other"];
 const TYPE_OPTIONS = ["All Types", "Gold", "Silver", "Other"];
 
@@ -251,6 +211,7 @@ useEffect(() => {
   const tableHeaders = [
     { label: "Item ID", key: "id" },
     { label: "Product Name", key: "productName" },
+    { label: "HUID", key: "huid" },
     {label:"Stocks", key: "stocks"},
     { label: "Purity", key: "purity" },
     { label: "Type", key: "type" },
@@ -350,7 +311,7 @@ useEffect(() => {
           className="hidden md:grid items-center px-6 py-4 border-b border-[#E8DDD4]"
           style={{
             gridTemplateColumns:
-              "120px 400px 100px 130px 120px 100px 110px 180px 100px",
+              "120px 300px 100px 100px 130px 120px 100px 110px 180px 100px",
           }}
         >
           {tableHeaders.map((h) => (
@@ -422,11 +383,16 @@ useEffect(() => {
                   <div className="grid grid-cols-2 gap-y-2 text-sm">
                     <span className="text-[#9E8A7E]">ID</span>
                     <span className="text-[#6B5040]">
-                      {item?.huid || "#N/A"}
+                      {item?.barcode || "#N/A"}
                     </span>
 
                     <span className="text-[#9E8A7E]">Purity</span>
                     <PurityBadge label={item?.purity} />
+
+                    <span className="text-[#9E8A7E]">HUID</span>
+                    <span className="text-[#6B5040]">
+                      {item?.huid || "#N/A"}
+                    </span>
 
                     <span className="text-[#9E8A7E]">Stocks</span>
                     <span className="text-[#2C1A0E] font-semibold">
@@ -458,15 +424,19 @@ useEffect(() => {
                   className="hidden md:grid items-center px-6 py-5 hover:bg-[#F5EDE4]"
                   style={{
                     gridTemplateColumns:
-                     "120px 400px 100px 130px 120px 100px 110px 180px 100px",
+                     "120px 300px 100px 100px 130px 120px 100px 110px 180px 100px",
                   }}
                 >
                   <span className="text-[#6B5040] text-[13px] font-[Georgia]">
-                    {item?.huid || "#N/A"}
+                    {item?.barcode || "#N/A"}
                   </span>
 
                   <span className="text-[#2C1A0E] text-[15px] font-semibold pr-4 whitespace-nowrap font-[Georgia]">
                     {item?.name}
+                  </span>
+
+                  <span className="text-[#6B5040] text-[13px] font-[Georgia]">
+                    {item?.huid || "#N/A"}
                   </span>
 
                   <span className="text-[#2C1A0E] text-[13px] font-semibold pr-4 whitespace-nowrap font-[Georgia]">

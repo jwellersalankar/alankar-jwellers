@@ -14,6 +14,7 @@ export interface IPRODUCTS extends Document {
   huid?: string;
   isHUID: boolean;
   hsn: number;
+  barcode?: string;
   supplier?: ObjectId;
 
   // 🔥 NEW FIELDS
@@ -57,6 +58,7 @@ const ProductSchema: Schema = new Schema<IPRODUCTS>(
       default: false,
     },
     hsn: { type: Number, required: true },
+    barcode: { type: String },
     supplier: { type: Schema.Types.ObjectId, ref: "Supplier" },
 
     // ✅ NEW STOCK FIELDS
