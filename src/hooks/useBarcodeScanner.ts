@@ -3,16 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 
-const playBeep = () => {
-  try {
-    const audio = new Audio("/sounds/beep.mp3");
-
-    audio.volume = 0.5;
-
-    audio.play();
-  } catch {}
+const playBeep = async () => {
+    try {
+        const audio = new Audio("/sounds/beep.mp3");
+        audio.volume = 0.5;
+        await audio.play();
+    } catch {}
 };
-
 export function useBarcodeScanner(onScan: (value: string) => void) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -69,7 +66,7 @@ export function useBarcodeScanner(onScan: (value: string) => void) {
       await reader.current.decodeFromVideoDevice(
         selectedCamera.deviceId,
         videoRef.current!,
-        (result) => {
+        async (result) => {
           if (!result) return;
 
           scanLockRef.current = true;
@@ -90,7 +87,7 @@ export function useBarcodeScanner(onScan: (value: string) => void) {
 
           navigator.vibrate?.(100);
 
-          playBeep();
+          await playBeep();
 
           onScan(value);
 

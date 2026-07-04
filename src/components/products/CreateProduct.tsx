@@ -316,6 +316,7 @@ export default function CreateProductModal({
   // Derive: if HUID is filled, quantity must be 1
   const isHUID = form.huid.trim().length > 0;
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const successTimer = useRef<NodeJS.Timeout | null>(null);
 
   const { isMobile } = useDevice();
 
@@ -333,9 +334,13 @@ export default function CreateProductModal({
 
     setScanSuccess(true);
 
-    setTimeout(() => {
-      setScanSuccess(false);
-    }, 1500);
+    if (successTimer.current) {
+    clearTimeout(successTimer.current);
+}
+
+successTimer.current = setTimeout(() => {
+    setScanSuccess(false);
+}, 1500);
   });
 
   useEffect(() => {
