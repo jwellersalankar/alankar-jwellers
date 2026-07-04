@@ -29,9 +29,12 @@ export function useBarcodeScanner(onScan: (value: string) => void) {
   const [error, setError] = useState("");
   const lastScannedRef = useRef("");
   const lastScanTimeRef = useRef(0);
+  const scanLockRef = useRef(false);
 
   const startScanner = async (index = cameraIndex) => {
     try {
+       scanLockRef.current = false;
+
       setLoading(true);
 
       setError("");
@@ -69,6 +72,8 @@ export function useBarcodeScanner(onScan: (value: string) => void) {
         (result) => {
           if (!result) return;
 
+          scanLockRef.current = true;
+
           const value = result.getText();
 
           const now = Date.now();
@@ -102,6 +107,8 @@ export function useBarcodeScanner(onScan: (value: string) => void) {
   };
 
  const stopScanner = () => {
+
+  scanLockRef.current = false;
   // Stop all camera tracks
   const stream = videoRef.current?.srcObject as MediaStream | null;
 
