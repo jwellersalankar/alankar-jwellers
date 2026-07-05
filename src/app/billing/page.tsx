@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  RefObject,
   use,
   useDeferredValue,
   useEffect,
@@ -16,6 +17,8 @@ import {
   Download,
   Search,
   Form,
+  Camera,
+  CheckCircle2,
 } from "lucide-react";
 import NavBar from "@/src/components/core/NavBar";
 import Footer from "@/src/components/core/Footer";
@@ -40,6 +43,9 @@ import { useRouter } from "next/navigation";
 import { User } from "next-auth";
 import { useSession } from "next-auth/react";
 import debounce from "lodash/debounce";
+import { useDevice } from "@/src/hooks/useDevice";
+import { useBarcodeScanner } from "@/src/hooks/useBarcodeScanner";
+import BarcodeScannerModal from "@/src/components/products/BarcodeScannerModal";
 
 // ── Types ──────────────────────────────────────────────
 type LineItem = {
@@ -70,6 +76,7 @@ export interface InvoiceData {
   shopDetails?: ISHOP | null;
   discount?: number;
   documentType?: string;
+  customerGSTIN?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────
@@ -164,29 +171,89 @@ function BillingMainSection() {
 
   const contentRef = useRef<HTMLDivElement>(null);
 
-  const [items, setItems] = useState<LineItem[]>([
-    {
-      id: "1",
-      name: "Kundan Filigree Necklace",
-      subtitle: "22K Gold · 45.2g",
-      weightG: 10,
-      rate: 345000,
-    },
-    {
-      id: "2",
-      name: "Solitaire Diamond Studs",
-      subtitle: "VVS1 Clarity · 2.0 Carat",
-      weightG: 10,
-      rate: 580000,
-    },
-  ]);
-
   const [user, setUser] = useState<User | null>(null);
   const [invoiceNo, setInvoiceNo] = useState("");
 
   const router = useRouter();
 
   const { data: session, status } = useSession();
+  const [scanSuccess, setScanSuccess] = useState(false);
+
+  const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const successTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const { isMobile } = useDevice();
+
+  const {
+    videoRef,
+    isOpen,
+    loading: scannerLoading,
+    error: scannerError,
+    startScanner,
+    stopScanner,
+    switchCamera,
+    devices,
+  } = useBarcodeScanner((barcode) => {
+    setSearch(barcode);
+
+    setScanSuccess(true);
+
+    if (successTimer.current) {
+      clearTimeout(successTimer.current);
+    }
+
+    successTimer.current = setTimeout(() => {
+      setScanSuccess(false);
+    }, 1500);
+  });
+
+  useEffect(() => {
+    if (isMobile) return;
+
+    let buffer = "";
+
+    let timeout: NodeJS.Timeout;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        if (buffer.length >= 4) {
+          setSearch(buffer);
+
+          barcodeInputRef.current?.focus();
+        }
+
+        buffer = "";
+
+        return;
+      }
+
+      if (e.key.length === 1) {
+        buffer += e.key;
+      }
+
+      clearTimeout(timeout);
+
+      timeout = setTimeout(() => {
+        buffer = "";
+      }, 100);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isMobile]);
+
+  const handleBarcodeClick = () => {
+    if (isMobile) {
+      startScanner();
+
+      return;
+    }
+
+    barcodeInputRef.current?.focus();
+  };
 
   useEffect(() => {
     if (status === "loading") return; // ⛔ wait
@@ -309,33 +376,29 @@ function BillingMainSection() {
   };
 
   const generateInvoiceNumber = (type: string) => {
-  const now = new Date();
+    const now = new Date();
 
-  const timestamp = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("");
+    const timestamp = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("");
 
-  const time = [
-    String(now.getHours()).padStart(2, "0"),
-    String(now.getMinutes()).padStart(2, "0"),
-    String(now.getSeconds()).padStart(2, "0"),
-  ].join("");
+    const time = [
+      String(now.getHours()).padStart(2, "0"),
+      String(now.getMinutes()).padStart(2, "0"),
+      String(now.getSeconds()).padStart(2, "0"),
+    ].join("");
 
-  const prefix =
-    type === "credit_note"
-      ? "CN"
-      : type === "debit_note"
-      ? "DN"
-      : "INV";
+    const prefix =
+      type === "credit_note" ? "CN" : type === "debit_note" ? "DN" : "INV";
 
-  return `${prefix}/${timestamp}/${time}`;
-};
+    return `${prefix}/${timestamp}/${time}`;
+  };
 
-useEffect(() => {
-  setInvoiceNo(generateInvoiceNumber(documentType));
-}, [documentType]);
+  useEffect(() => {
+    setInvoiceNo(generateInvoiceNumber(documentType));
+  }, [documentType]);
 
   useEffect(() => {
     setData({
@@ -348,8 +411,14 @@ useEffect(() => {
       discount: discount,
       documentType: documentType,
     });
-  }, [client, selectedItems, oldProducts, shopDetails, documentType, referenceInvoice]);
-
+  }, [
+    client,
+    selectedItems,
+    oldProducts,
+    shopDetails,
+    documentType,
+    referenceInvoice,
+  ]);
 
   const deferredData = useDeferredValue(data);
 
@@ -378,15 +447,47 @@ useEffect(() => {
 
   const handlePrint = async () => {
     if (!data) return;
-    const pdfBlob = await generatePDFBlob(data);
-    const blob = new Blob([pdfBlob], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
 
-    const newTab = window.open();
-    if (newTab) {
-      newTab.document.write(`
-    <iframe src="${url}" style="width:100%;height:100%"></iframe>
-  `);
+    try {
+      const blob = await generatePDFBlob(data);
+      const url = URL.createObjectURL(blob);
+
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        // Mobile browsers don't reliably support auto-printing PDFs.
+        // Open the PDF so the user can use the browser's Print option.
+        window.open(url, "_blank");
+
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 30000);
+
+        return;
+      }
+
+      // Desktop
+      const printWindow = window.open("", "_blank");
+
+      if (!printWindow) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      printWindow.document.write(`
+      <iframe
+              src="${url}"
+              style="width:100%;height:100%;border:none"
+            />
+    `);
+
+      printWindow.document.close();
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 30000);
+    } catch (error) {
+      console.error("Print failed:", error);
     }
   };
 
@@ -407,215 +508,206 @@ useEffect(() => {
     [],
   );
 
-const handleFinalize = async () => {
-  if (!data) return;
+  const handleFinalize = async () => {
+    if (!data) return;
 
-  setFinalizing(true);
+    setFinalizing(true);
 
-  try {
-    const pdfBlob = await generatePDFBlob(data);
+    try {
+      const pdfBlob = await generatePDFBlob(data);
 
-    const placeOfSupply =
-      shopDetails?.gstin?.slice(0, 2) || "10";
+      const placeOfSupply = shopDetails?.gstin?.slice(0, 2) || "10";
 
-    // =========================
-    // INVOICE
-    // =========================
-    if (documentType === "invoice") {
-      const formattedItems = selectedItems.map(
-        (item) => ({
+      // =========================
+      // INVOICE
+      // =========================
+      if (documentType === "invoice") {
+        const formattedItems = selectedItems.map((item) => ({
           productId: item._id,
           quantity: 1,
-          makingCharge:
-            item.makingCharge || 0,
-        })
-      );
+          makingCharge: item.makingCharge || 0,
+        }));
 
-      const body = {
-        customerDetails: client,
+        const body = {
+          customerDetails: client,
 
-        items: formattedItems,
+          items: formattedItems,
 
-        oldProducts,
+          oldProducts,
 
-        billingDetails: {
-          invoiceNumber: invoiceNo,
-          invoiceDate,
+          billingDetails: {
+            invoiceNumber: invoiceNo,
+            invoiceDate,
 
-          sellerGSTIN:
-            shopDetails?.gstin,
+            sellerGSTIN: shopDetails?.gstin,
 
-          placeOfSupply,
+            placeOfSupply,
 
-          isInterState: false,
+            isInterState: false,
 
-          goldRatePer10g:
-            shopDetails?.goldRatePer10g,
+            goldRatePer10g: shopDetails?.goldRatePer10g,
 
-          silverRatePerKg:
-            shopDetails?.silverRatePerKg,
+            silverRatePerKg: shopDetails?.silverRatePerKg,
 
-          metalGSTRate:
-            shopDetails?.gstOnMetal,
+            metalGSTRate: shopDetails?.gstOnMetal,
 
-          makingGSTRate:
-            shopDetails?.gstOnMakingCharge,
+            makingGSTRate: shopDetails?.gstOnMakingCharge,
 
-          grossWeight,
+            grossWeight,
 
-          customDuty: 0,
+            customDuty: 0,
 
-          discount,
-        },
-      };
-
-      const formData = new FormData();
-
-      formData.append(
-        "file",
-        new File(
-          [pdfBlob],
-          `${invoiceNo}.pdf`,
-          {
-            type: "application/pdf",
-          }
-        )
-      );
-
-      formData.append(
-        "body",
-        JSON.stringify(body)
-      );
-
-      const res = await axios.post(
-        "/api/create-bill",
-        formData,
-        {
-          headers: {
-            "Content-Type":
-              "multipart/form-data",
+            discount,
           },
-        }
-      );
+        };
 
-      if (res.data.success) {
-        const url = res.data.pdf;
+        const formData = new FormData();
 
-        const newTab = window.open();
-
-        if (newTab) {
-          newTab.document.write(`
-            <iframe
-              src="${url}"
-              style="width:100%;height:100%;border:none"
-            />
-          `);
-        }
-      }
-    }
-
-    // =========================
-    // CREDIT / DEBIT NOTE
-    // =========================
-    else {
-      if (!referenceInvoice) {
-        throw new Error(
-          "Reference invoice is required"
+        formData.append(
+          "file",
+          new File([pdfBlob], `${invoiceNo}.pdf`, {
+            type: "application/pdf",
+          }),
         );
+
+        formData.append("body", JSON.stringify(body));
+
+        const res = await axios.post("/api/create-bill", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+
+        if (res.data.success) {
+          const url = res.data.pdf;
+
+           const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        // Mobile browsers don't reliably support auto-printing PDFs.
+        // Open the PDF so the user can use the browser's Print option.
+        window.open(url, "_blank");
+
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 30000);
+
+        return;
       }
 
-      const formData = new FormData();
+      // Desktop
+      const printWindow = window.open("", "_blank");
 
-      formData.append(
-        "file",
-        new File(
-          [pdfBlob],
-          `${invoiceNo}.pdf`,
-          {
-            type: "application/pdf",
-          }
-        )
-      );
+      if (!printWindow) {
+        URL.revokeObjectURL(url);
+        return;
+      }
 
-      const body = {
-        orderId:
-          referenceInvoice._id,
-
-        noteNumber: invoiceNo,
-
-        type: documentType,
-
-        reason: adjustmentReason,
-
-        reasonDescription: "",
-
-        settlementMode:
-          "pending",
-
-        products: selectedItems.map(
-          (item: any) => ({
-            productId:
-              item.productId,
-
-            quantity:
-              item.adjustmentQuantity ||
-              1,
-
-            adjustedMetalPrice:
-              item.adjustedMetalPrice,
-
-            adjustedMakingCharge:
-              item.adjustedMakingCharge,
-          })
-        ),
-      };
-
-      formData.append(
-        "body",
-        JSON.stringify(body)
-      );
-
-      const res = await axios.post(
-        "/api/create-adjustment",
-        formData,
-        {
-          headers: {
-            "Content-Type":
-              "multipart/form-data",
-          },
-        }
-      );
-
-      if (res.data.success) {
-        const url =
-          res.data.pdf ||
-          res.data.noteUrl;
-
-        const newTab = window.open();
-
-        if (newTab && url) {
-          newTab.document.write(`
-            <iframe
+      printWindow.document.write(`
+      <iframe
               src="${url}"
               style="width:100%;height:100%;border:none"
             />
-          `);
+    `);
+
+      printWindow.document.close();
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 30000);
         }
       }
+
+      // =========================
+      // CREDIT / DEBIT NOTE
+      // =========================
+      else {
+        if (!referenceInvoice) {
+          throw new Error("Reference invoice is required");
+        }
+
+        const formData = new FormData();
+
+        formData.append(
+          "file",
+          new File([pdfBlob], `${invoiceNo}.pdf`, {
+            type: "application/pdf",
+          }),
+        );
+
+        const body = {
+          orderId: referenceInvoice._id,
+
+          noteNumber: invoiceNo,
+
+          type: documentType,
+
+          reason: adjustmentReason,
+
+          reasonDescription: "",
+
+          settlementMode: "pending",
+
+          products: selectedItems.map((item: any) => ({
+            productId: item.productId,
+
+            quantity: item.adjustmentQuantity || 1,
+
+            adjustedMetalPrice: item.adjustedMetalPrice,
+
+            adjustedMakingCharge: item.adjustedMakingCharge,
+          })),
+        };
+
+        formData.append("body", JSON.stringify(body));
+
+        const res = await axios.post("/api/create-adjustment", formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+
+        if (res.data.success) {
+  const url = res.data.pdf || res.data.noteUrl;
+
+  if (!url) return;
+
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(
+    navigator.userAgent
+  );
+
+  if (isMobile) {
+    // Open the PDF directly in a new tab (or PDF viewer)
+    window.open(url, "_blank");
+  } else {
+    // Desktop: open in a print-friendly window
+    const printWindow = window.open("", "_blank");
+
+    if (printWindow) {
+      printWindow.document.write(`
+        <iframe
+              src="${url}"
+              style="width:100%;height:100%;border:none"
+            />
+      `);
+
+      printWindow.document.close();
     }
-  } catch (error: any) {
-    console.error(error);
-
-    alert(
-      error?.response?.data?.message ||
-        error?.message ||
-        "Something went wrong"
-    );
-  } finally {
-    setFinalizing(false);
   }
-};
+}
+      }
+    } catch (error: any) {
+      console.error(error);
 
+      alert(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Something went wrong",
+      );
+    } finally {
+      setFinalizing(false);
+    }
+  };
 
   const handleEstimatePrint = async () => {
     if (!data) return;
@@ -623,12 +715,40 @@ const handleFinalize = async () => {
 
     const url = URL.createObjectURL(estimateBlob);
 
-    const newTab = window.open();
-    if (newTab) {
-      newTab.document.write(`
-      <iframe src="${url}" style="width:100%;height:100%"></iframe>
+     const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        // Mobile browsers don't reliably support auto-printing PDFs.
+        // Open the PDF so the user can use the browser's Print option.
+        window.open(url, "_blank");
+
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 30000);
+
+        return;
+      }
+
+      // Desktop
+      const printWindow = window.open("", "_blank");
+
+      if (!printWindow) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      printWindow.document.write(`
+      <iframe
+              src="${url}"
+              style="width:100%;height:100%;border:none"
+            />
     `);
-    }
+
+      printWindow.document.close();
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 30000);
   };
 
   function setCustomer(customer: any) {
@@ -645,30 +765,26 @@ const handleFinalize = async () => {
   //   throw new Error("Function not implemented.");
   // }
 
-  const addProductForAdjustment = (
-  product: IPRODUCTS
-) => {
-  console.log("Adding:", product);
+  const addProductForAdjustment = (product: IPRODUCTS) => {
+    console.log("Adding:", product);
 
-  setSelectedItems((prev) => {
-    console.log("Prev:", prev);
+    setSelectedItems((prev) => {
+      console.log("Prev:", prev);
 
-    const exists = prev.some(
-      (p) => p._id === product._id
-    );
+      const exists = prev.some((p) => p._id === product._id);
 
-    if (exists) {
-      console.log("Already exists");
-      return prev;
-    }
+      if (exists) {
+        console.log("Already exists");
+        return prev;
+      }
 
-    const updated = [...prev, product];
+      const updated = [...prev, product];
 
-    console.log("Updated:", updated);
+      console.log("Updated:", updated);
 
-    return updated;
-  });
-};
+      return updated;
+    });
+  };
 
   return (
     <div className="min-h-screen bg-[#FFF8F7] px-6 md:px-12 lg:px-16 pt-12 pb-20 flex flex-col lg:flex-row gap-10">
@@ -776,6 +892,17 @@ const handleFinalize = async () => {
                 className="flex-1"
               />
             </div>
+            <FormInput
+              label="Customer GSTIN"
+              placeholder="Enter Customer GSTIN"
+              value={client?.customerGSTIN || ""}
+              onChange={(v) =>
+                setClient(
+                  (c) => ({ ...c, customerGSTIN: v }) as ICustomer | null,
+                )
+              }
+              className="flex-1"
+            />
           </div>
         </div>
 
@@ -796,10 +923,9 @@ const handleFinalize = async () => {
             onChange={(e) => {
               setDocumentType(
                 e.target.value as "invoice" | "credit_note" | "debit_note",
-              )
+              );
               setInvoiceNo(generateInvoiceNumber(e.target.value));
-            }
-            }
+            }}
             className="w-full bg-transparent border-b border-[#3D2B1F]/30 pb-2 text-[#3D2B1F] focus:outline-none"
           >
             <option value="invoice">Tax Invoice</option>
@@ -886,95 +1012,79 @@ const handleFinalize = async () => {
               </div>
             )}
 
-            {
-  referenceInvoice && (
-    <div className="mt-4 rounded-xl border border-[#D8CBB8] bg-[#FCF8F1] p-4">
-      <div className="flex justify-between items-center">
-        <div>
-          <p className="font-medium text-[#3D2B1F]">
-            {referenceInvoice.invoiceNumber}
-          </p>
+            {referenceInvoice && (
+              <div className="mt-4 rounded-xl border border-[#D8CBB8] bg-[#FCF8F1] p-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="font-medium text-[#3D2B1F]">
+                      {referenceInvoice.invoiceNumber}
+                    </p>
 
-          <p className="text-sm text-[#8A7867]">
-            {referenceInvoice.customer?.name}
-          </p>
+                    <p className="text-sm text-[#8A7867]">
+                      {referenceInvoice.customer?.name}
+                    </p>
 
-          <p className="text-xs text-[#A69380]">
-            {referenceInvoice.customer?.phone}
-          </p>
-        </div>
+                    <p className="text-xs text-[#A69380]">
+                      {referenceInvoice.customer?.phone}
+                    </p>
+                  </div>
 
-        <div className="text-right">
-          <p className="text-xs text-[#A69380]">
-            Invoice Amount
-          </p>
+                  <div className="text-right">
+                    <p className="text-xs text-[#A69380]">Invoice Amount</p>
 
-          <p className="font-semibold text-[#3D2B1F]">
-            ₹
-            {referenceInvoice.totalPayableAmmount?.toLocaleString()}
-          </p>
-        </div>
-      </div>
-    </div>
-  )
-}
-
+                    <p className="font-semibold text-[#3D2B1F]">
+                      ₹{referenceInvoice.totalPayableAmmount?.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-{
-  referenceInvoice &&
-  documentType !== "invoice" && (
-    <div className="mt-8">
-      <h3
-        className="mb-4 text-[#8B6914]"
-        style={{
-          fontFamily: "'Georgia', serif",
-          fontSize: "12px",
-          letterSpacing: "0.15em",
-        }}
-      >
-        ORIGINAL INVOICE PRODUCTS
-      </h3>
-
-      <div className="space-y-3">
-        {referenceInvoice.products.map(
-          (product: any) => (
-            <div
-              key={product.productId}
-              className="rounded-xl border border-[#E7DCCB] p-4 bg-[#FFFDF8]"
+        {referenceInvoice && documentType !== "invoice" && (
+          <div className="mt-8">
+            <h3
+              className="mb-4 text-[#8B6914]"
+              style={{
+                fontFamily: "'Georgia', serif",
+                fontSize: "12px",
+                letterSpacing: "0.15em",
+              }}
             >
-              <div className="flex justify-between items-center">
-                <div>
-                  <p className="font-medium text-[#3D2B1F]">
-                    {product.name}
-                  </p>
+              ORIGINAL INVOICE PRODUCTS
+            </h3>
 
-                  <p className="text-xs text-[#8A7867]">
-                    Sold Qty: {product.quantity}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    addProductForAdjustment(
-                      product
-                    )
-                  }
-                  className="px-4 py-2 rounded-lg border border-[#8B6914] text-[#8B6914] hover:bg-[#8B6914] hover:text-white transition"
+            <div className="space-y-3">
+              {referenceInvoice.products.map((product: any) => (
+                <div
+                  key={product.productId}
+                  className="rounded-xl border border-[#E7DCCB] p-4 bg-[#FFFDF8]"
                 >
-                  Select
-                </button>
-              </div>
-            </div>
-          )
-        )}
-      </div>
-    </div>
-  )
-}
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="font-medium text-[#3D2B1F]">
+                        {product.name}
+                      </p>
 
+                      <p className="text-xs text-[#8A7867]">
+                        Sold Qty: {product.quantity}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => addProductForAdjustment(product)}
+                      className="px-4 py-2 rounded-lg border border-[#8B6914] text-[#8B6914] hover:bg-[#8B6914] hover:text-white transition"
+                    >
+                      Select
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {documentType !== "invoice" && (
           <div className="mt-4">
@@ -994,14 +1104,32 @@ const handleFinalize = async () => {
               onChange={(e) => setAdjustmentReason(e.target.value as any)}
               className="w-full mt-2 bg-transparent border-b text-[#3D2B1F] border-[#3D2B1F]/30 pb-2"
             >
-              <option className={`${documentType != "credit_note" ? "hidden" : "block"
-              }`} value="return">Product Return</option>
+              <option
+                className={`${
+                  documentType != "credit_note" ? "hidden" : "block"
+                }`}
+                value="return"
+              >
+                Product Return
+              </option>
 
-              <option className={`${documentType != "credit_note" ? "hidden" : "block"
-              }`} value="price_decrease">Price Decrease</option>
+              <option
+                className={`${
+                  documentType != "credit_note" ? "hidden" : "block"
+                }`}
+                value="price_decrease"
+              >
+                Price Decrease
+              </option>
 
-              <option className={`${documentType === "credit_note" ? "hidden" : "block"
-              }`} value="price_increase">Price Increase</option>
+              <option
+                className={`${
+                  documentType === "credit_note" ? "hidden" : "block"
+                }`}
+                value="price_increase"
+              >
+                Price Increase
+              </option>
 
               <option value="gst_correction">GST Correction</option>
             </select>
@@ -1011,35 +1139,33 @@ const handleFinalize = async () => {
         {/* Inventory Selection */}
         <div>
           {/* HEADER */}
-          {
-            documentType === 'invoice' && (
-              <div className="flex items-center justify-between mb-4">
-            <p
-              className="text-[#8B6914] tracking-[0.15em] uppercase"
-              style={{
-                fontFamily: "'Georgia', serif",
-                fontSize: "11px",
-                fontWeight: 600,
-              }}
-            >
-              Inventory Selection
-            </p>
+          {documentType === "invoice" && (
+            <div className="flex items-center justify-between mb-4">
+              <p
+                className="text-[#8B6914] tracking-[0.15em] uppercase"
+                style={{
+                  fontFamily: "'Georgia', serif",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                }}
+              >
+                Inventory Selection
+              </p>
 
-            <button
-              onClick={() => setOpen(!open)}
-              className="flex items-center gap-1 text-[#3C000D] hover:text-[#C9A84C] transition-colors duration-200"
-              style={{
-                fontFamily: "'Georgia', serif",
-                fontSize: "12px",
-                fontWeight: 600,
-              }}
-            >
-              <Plus size={13} strokeWidth={2.5} />
-              Add New Item
-            </button>
-          </div>
-            )
-          }
+              <button
+                onClick={() => setOpen(!open)}
+                className="flex items-center gap-1 text-[#3C000D] hover:text-[#C9A84C] transition-colors duration-200"
+                style={{
+                  fontFamily: "'Georgia', serif",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                }}
+              >
+                <Plus size={13} strokeWidth={2.5} />
+                Add New Item
+              </button>
+            </div>
+          )}
 
           {/* 🔽 DROPDOWN */}
           {open && (
@@ -1054,7 +1180,25 @@ const handleFinalize = async () => {
                   className="w-full outline-none text-sm placeholder:text-[#b8a898] text-[#3D2B1F]"
                   style={{ fontFamily: "'Georgia', serif" }}
                 />
+                <button
+                  onClick={handleBarcodeClick}
+                  className="hover:text-[#6B1A1A] transition-all duration-200 hover:scale-110"
+                >
+                  <Camera size={18} strokeWidth={2} color="#b8a898" />
+                </button>
               </div>
+              {scanSuccess && (
+                <div
+                  className="mt-2 flex items-center gap-2 text-[#2E7D32]"
+                  style={{
+                    fontFamily: "Georgia",
+                    fontSize: 12,
+                  }}
+                >
+                  <CheckCircle2 size={14} />
+                  Barcode scanned successfully
+                </div>
+              )}
 
               {/* RESULTS */}
               <div className="max-h-48 overflow-y-auto">
@@ -1182,10 +1326,12 @@ const handleFinalize = async () => {
                             item.weight
                         : item?.type === "Silver"
                           ? (item?.purity === "18k"
-                              ? ((shopDetails?.silverRatePerKg ?? 0) / 1000) * 0.75
+                              ? ((shopDetails?.silverRatePerKg ?? 0) / 1000) *
+                                0.75
                               : item?.purity === "22k"
-                              ? ((shopDetails?.silverRatePerKg ?? 0) / 1000) * 0.916
-                              : (shopDetails?.silverRatePerKg ?? 0) / 1000) *
+                                ? ((shopDetails?.silverRatePerKg ?? 0) / 1000) *
+                                  0.916
+                                : (shopDetails?.silverRatePerKg ?? 0) / 1000) *
                             item.weight
                           : item.price,
                     )}
@@ -1231,91 +1377,89 @@ const handleFinalize = async () => {
               </div>
             ))}
           </div>
-          {
-            documentType === 'invoice' && (
-              <div>
-                <div className="flex items-center justify-between mb-4">
-            <p
-              className="text-[#8B6914] tracking-[0.15em] uppercase"
-              style={{
-                fontFamily: "'Georgia', serif",
-                fontSize: "11px",
-                fontWeight: 600,
-              }}
-            >
-              OLD PRODUCTS
-            </p>
-             <div className="flex justify-end mt-2">
-            <button
-              onClick={() => setOpenOldProduct(!open)}
-              className="flex items-center gap-1 text-[#3C000D] hover:text-[#C9A84C] transition-colors duration-200"
-              style={{
-                fontFamily: "'Georgia', serif",
-                fontSize: "12px",
-                fontWeight: 600,
-              }}
-            >
-              <Plus size={13} strokeWidth={2.5} />
-              Add old Item
-            </button>
-          </div>
-          </div>
-
-           <div className="flex flex-col gap-3">
-            {oldProducts?.map((item: IProduct, idx) => (
-              <div
-                key={item?._id?.toString() ?? idx}
-                className="bg-[#FFF0F1] rounded-md px-5 py-4 flex items-start justify-between"
-              >
-                <div>
-                  <p
-                    className="text-[#2C1A0E] mb-1"
-                    style={{
-                      fontFamily: "'Georgia', serif",
-                      fontSize: "15px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {item?.name}
-                  </p>
-                  <p
-                    className="text-[#9E8A7E]"
+          {documentType === "invoice" && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <p
+                  className="text-[#8B6914] tracking-[0.15em] uppercase"
+                  style={{
+                    fontFamily: "'Georgia', serif",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                  }}
+                >
+                  OLD PRODUCTS
+                </p>
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={() => setOpenOldProduct(!open)}
+                    className="flex items-center gap-1 text-[#3C000D] hover:text-[#C9A84C] transition-colors duration-200"
                     style={{
                       fontFamily: "'Georgia', serif",
                       fontSize: "12px",
-                    }}
-                  >
-                    {`${item?.purity} ${item?.type} · ${item?.weight}g`}
-                  </p>
-                </div>
-
-                <div className="flex flex-col items-end gap-2">
-                  <span
-                    className="text-[#2C1A0E]"
-                    style={{
-                      fontFamily: "'Georgia', serif",
-                      fontSize: "15px",
                       fontWeight: 600,
                     }}
                   >
-                    {fmt(item?.price)}
-                  </span>
-
-                  <button
-                    onClick={() => {
-                      removeOldItem(idx);
-                    }}
-                    className="text-[#C0392B] hover:text-[#96281B]"
-                  >
-                    <Trash2 size={16} strokeWidth={1.6} />
+                    <Plus size={13} strokeWidth={2.5} />
+                    Add old Item
                   </button>
                 </div>
               </div>
-            ))}
-          </div>
+
+              <div className="flex flex-col gap-3">
+                {oldProducts?.map((item: IProduct, idx) => (
+                  <div
+                    key={item?._id?.toString() ?? idx}
+                    className="bg-[#FFF0F1] rounded-md px-5 py-4 flex items-start justify-between"
+                  >
+                    <div>
+                      <p
+                        className="text-[#2C1A0E] mb-1"
+                        style={{
+                          fontFamily: "'Georgia', serif",
+                          fontSize: "15px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {item?.name}
+                      </p>
+                      <p
+                        className="text-[#9E8A7E]"
+                        style={{
+                          fontFamily: "'Georgia', serif",
+                          fontSize: "12px",
+                        }}
+                      >
+                        {`${item?.purity} ${item?.type} · ${item?.weight}g`}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <span
+                        className="text-[#2C1A0E]"
+                        style={{
+                          fontFamily: "'Georgia', serif",
+                          fontSize: "15px",
+                          fontWeight: 600,
+                        }}
+                      >
+                        {fmt(item?.price)}
+                      </span>
+
+                      <button
+                        onClick={() => {
+                          removeOldItem(idx);
+                        }}
+                        className="text-[#C0392B] hover:text-[#96281B]"
+                      >
+                        <Trash2 size={16} strokeWidth={1.6} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            )
-          }
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col justify-between mb-4">
@@ -1452,6 +1596,15 @@ const handleFinalize = async () => {
         </div>
         {/* <PDFViewer width="100%" height={900}><GSTInvoicePDF data={data!} /></PDFViewer> */}
       </div>
+      <BarcodeScannerModal
+        open={isOpen}
+        loading={scannerLoading}
+        error={scannerError}
+        videoRef={videoRef as RefObject<HTMLVideoElement>}
+        onClose={stopScanner}
+        switchCamera={switchCamera}
+        cameraCount={devices?.length}
+      />
     </div>
   );
 }
@@ -1464,4 +1617,7 @@ export default function BillingPage() {
       <Footer />
     </div>
   );
+}
+function setScanSuccess(arg0: boolean) {
+  throw new Error("Function not implemented.");
 }

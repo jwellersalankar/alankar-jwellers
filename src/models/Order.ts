@@ -99,6 +99,7 @@ export interface IOrder extends Document {
   sellerGSTIN: string;
   placeOfSupply: string;
   isInterState: boolean;
+  customerGSTIN?: string; // Optional field for customer GSTIN
 
   // 🔥 TOTAL GST SPLIT
   totalTaxableValue: number;
@@ -235,6 +236,7 @@ const OrderSchema = new Schema<IOrder>(
     sellerGSTIN: String,
     placeOfSupply: String,
     isInterState: Boolean,
+    customerGSTIN: String, // Optional field for customer GSTIN
 
     totalTaxableValue: Number,
 

@@ -21,7 +21,7 @@ export async function GET(req: Request) {
 if (search) {
   query.$or = [
     { name: { $regex: search, $options: "i" } },
-    { huid: { $regex: search, $options: "i" } },
+    { barcode: { $regex: search, $options: "i" } },
   ];
 }
 

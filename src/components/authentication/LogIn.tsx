@@ -111,19 +111,19 @@ export default function LoginPage() {
           Replace this div with:
           <Image src="/jewellery-login.png" alt="Jewellery" fill className="object-contain object-center" />
         */}
-        <div className="relative z-10 flex-1 flex items-center justify-center">
+        <div className="relative w-full z-10 flex-1 flex items-center justify-center">
           <div
             className=" rounded-xl"
             style={{ aspectRatio: "1 / 1" }}
           >
             {/* Deep purple gradient placeholder matching jewellery photo bg */}
             {/* <div className="w-full h-full rounded-xl bg-gradient-to-br from-[#2A1A4A] via-[#1A1035] to-[#0D0820]" /> */}
-            <img src="./Shop-Location.jpeg" alt="" className="w-full h-full ocject-cover" />
+            <img src="./Jwellery.png" alt="" className="w-full h-full ocject-cover" />
           </div>
         </div>
 
         {/* Bottom: Tag text */}
-        <div className="relative z-10">
+        <div className="relative z-10 ml-5">
           <h2
             className="text-white mb-3"
             style={{

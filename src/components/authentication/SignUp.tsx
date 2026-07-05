@@ -173,7 +173,7 @@ export default function SignupPage() {
               <div className="w-16 h-px bg-[#C9A84C]/40" />
             </div> */}
           </div>
-          <img src="./Shop-Location.jpeg" alt="" className="w-full h-full object-cover" />
+          <img src="./Shop-Location.png" alt="" className="w-full h-full object-cover aspect-video" />
         </div>
 
         {/* Bottom copy */}

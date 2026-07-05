@@ -53,6 +53,9 @@ export async function POST(req: Request) {
       });
     }
 
+    // customer gstin is optional, so we can use it if provided
+    const customerGSTIN = customerDetails.customerGSTIN || undefined;
+
     // =========================
     // 🔹 PDF UPLOAD
     // =========================
@@ -269,6 +272,7 @@ export async function POST(req: Request) {
       sellerGSTIN,
       placeOfSupply: placeOfSupply ?? "10",
       isInterState,
+      customerGSTIN: customerGSTIN ?? undefined,
 
       invoiceNumber,
       invoiceUrl: pdfUrl?.secure_url,

@@ -78,6 +78,7 @@ export interface ICustomer extends Document {
   payments: IPayment[];
   createdAt?: Date;
   updatedAt?: Date;
+  customerGSTIN?: string; // Added field for GSTIN
 }
 
 const CustomerSchema = new Schema<ICustomer>(

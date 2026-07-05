@@ -55,7 +55,7 @@ const INITIAL_PROFILE: UserProfile = {
   username: "Anjali Sharma",
   role: "Store Manager",
   shop: {
-    name: "Lakhhi Jewellers",
+    name: "Alankar Jewellers",
     gstin: "27AAPFU0939F1ZV",
     address: "124 Heritage Plaza, Suite 400, Calcutta, WB 700001",
     contactNumber: "+91 98300 12345",
