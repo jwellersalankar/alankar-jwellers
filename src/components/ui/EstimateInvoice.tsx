@@ -1,12 +1,10 @@
-// EstimateInvoicePDF.tsx
-// Estimate variant of GSTInvoicePDF — no GST rows, no GSTIN in header.
-// Fully synced with the latest GSTInvoicePDF architecture:
-//   ✅ Watermark
-//   ✅ New logo-stack layout (logo circle + hallmark stacked, shop name beside)
-//   ✅ Shared itemRate() helper (no duplicated rate logic)
+// GSTInvoicePDF.tsx — synced with GSTInvoice.tsx
+// Changes vs previous version:
+//   ✅ Watermark (semi-transparent logo centred behind all content)
+//   ✅ New header layout: logo circle + hallmark stacked, then shop name beside them
 //   ✅ Conditional customer GSTIN row
-//   ✅ Making charge shown as "amount (x.x%)" matching GSTInvoice.tsx
-//   ✅ No GST breakdown table, no CGST/SGST/IGST rows in totals panel
+//   ✅ Making charges cell shows "amount (x.x%)" matching HTML
+//   ✅ documentType-driven title (TAX INVOICE / CREDIT NOTE / DEBIT NOTE)
 
 import {
   Document,
@@ -32,31 +30,31 @@ Font.register({
 
 // ── Brand palette ──────────────────────────────────────
 const C = {
-  maroon:      "#4A1A1A",
-  gold:        "#8B6914",
-  goldLight:   "#C9A84C",
-  goldBg:      "#FDF3DC",
-  goldBg2:     "#F5E8B0",
-  border:      "#8B6914",
+  maroon: "#4A1A1A",
+  gold: "#8B6914",
+  goldLight: "#C9A84C",
+  goldBg: "#FDF3DC",
+  goldBg2: "#F5E8B0",
+  border: "#8B6914",
   borderLight: "#C8B8A8",
   borderFaint: "#DDD0C4",
-  textDark:    "#2C1A0E",
-  textMid:     "#3D2B1F",
-  textMuted:   "#5C4A3A",
-  bg:          "#FAF6F1",
-  white:       "#FFFFFF",
+  textDark: "#2C1A0E",
+  textMid: "#3D2B1F",
+  textMuted: "#5C4A3A",
+  bg: "#FAF6F1",
+  white: "#FFFFFF",
 };
 
-// ── Column widths (identical to GSTInvoicePDF) ─────────
+// ── Table column widths (must sum to 100) ──────────────
 const COL_W = {
-  sno:     5,
-  desc:    22,
-  hsn:     9,
-  purity:  10,
-  gross:   8,
-  huid:    13,
-  rate:    10,
-  making:  12,
+  sno: 5,
+  desc: 22,
+  hsn: 9,
+  purity: 10,
+  gross: 8,
+  huid: 13,
+  rate: 10,
+  making: 12,
   taxable: 11,
 } as const;
 
@@ -64,19 +62,16 @@ const COL = Object.fromEntries(
   Object.entries(COL_W).map(([k, v]) => [k, `${v}%`]),
 ) as Record<keyof typeof COL_W, string>;
 
-// Old gold exchange col widths
-const OGCOL = { item: "28%", purity: "22%", weight: "22%", price: "28%" };
+const GSTCOL = { desc: "34%", taxable: "22%", rate: "22%", amt: "22%" };
+const OGCOL  = { item: "28%", purity: "22%", weight: "22%", price: "28%" };
 
 // ── Helpers ────────────────────────────────────────────
 const fmtINR = (n: number) =>
   "₹" + n.toLocaleString("en-IN", { minimumFractionDigits: 2 });
 const fmtN = (n: number) => n.toFixed(2);
 
-/** Per-item metal rate — single source of truth, mirrors GSTInvoice.tsx */
-function itemRate(
-  item: InvoiceData["items"][number],
-  shop: InvoiceData["shopDetails"],
-) {
+/** Compute per-item metal rate exactly as GSTInvoice.tsx does */
+function itemRate(item: InvoiceData["items"][number], shop: InvoiceData["shopDetails"]) {
   if (item.type === "Gold") {
     return item.purity === "18k"
       ? ((shop?.goldRatePer10g ?? 0) / 10) * 0.75
@@ -91,13 +86,12 @@ function itemRate(
         ? ((shop?.silverRatePerKg ?? 0) / 1000) * 0.916
         : (shop?.silverRatePerKg ?? 0) / 1000;
   }
-  // Diamond / Other — price per gram
+  // Other / Diamond / etc.
   return (item.price ?? 0) / item.weight;
 }
 
-// ── StyleSheet ─────────────────────────────────────────
+// ── Styles ─────────────────────────────────────────────
 const s = StyleSheet.create({
-  // Page
   page: {
     backgroundColor: C.white,
     paddingHorizontal: 32,
@@ -108,7 +102,7 @@ const s = StyleSheet.create({
     position: "relative",
   },
 
-  // ── WATERMARK ─────────────────────────────────────────
+  // ── WATERMARK ──────────────────────────────────────
   watermark: {
     position: "absolute",
     top: 0,
@@ -117,25 +111,24 @@ const s = StyleSheet.create({
     bottom: 0,
     alignItems: "center",
     justifyContent: "center",
-    opacity: 0.07,
+    opacity: 0.07,          // matches HTML `opacity-10` (~10%) — tweak 0.05–0.10
   },
   watermarkImg: {
-    width: "75%",
+    width: "75%",           // fills most of the page without clipping
     height: "75%",
     objectFit: "contain",
   },
 
-  // ── CONTENT WRAPPER ───────────────────────────────────
+  // ── CONTENT WRAPPER (sits on top of watermark) ──────
   content: { flex: 1 },
 
-  // Gold divider
   goldRule: {
     height: 1.5,
     backgroundColor: C.goldLight,
     marginVertical: 5,
   },
 
-  // ── HEADER ────────────────────────────────────────────
+  // ── HEADER ──────────────────────────────────────────
   headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -147,7 +140,7 @@ const s = StyleSheet.create({
     alignItems: "flex-start",
     flex: 1,
   },
-  // Logo circle + hallmark stacked vertically
+  // Left sub-column: logo circle + hallmark stacked
   logoStack: {
     flexDirection: "column",
     alignItems: "center",
@@ -174,7 +167,7 @@ const s = StyleSheet.create({
     marginTop: 6,
     objectFit: "contain",
   },
-  // Shop name + tagline beside the logo stack
+  // Right sub-column: shop name + tagline
   shopTextBlock: {
     flexDirection: "column",
     justifyContent: "center",
@@ -196,14 +189,20 @@ const s = StyleSheet.create({
   },
 
   headerRight: { alignItems: "flex-end", maxWidth: 210 },
-  // "ESTIMATE INVOICE" label — slightly larger than a regular label
-  estimateLabel: {
+  taxLabel: {
     fontFamily: "NotoSans",
     fontWeight: "bold",
     fontSize: 14,
     color: "#8B2020",
     letterSpacing: 1,
     marginTop: 2,
+  },
+  gstLabel: {
+    fontFamily: "NotoSans",
+    fontWeight: "bold",
+    fontSize: 10,
+    color: C.gold,
+    letterSpacing: 0.8,
     marginBottom: 3,
   },
   metaLine: {
@@ -212,13 +211,9 @@ const s = StyleSheet.create({
     textAlign: "right",
     lineHeight: 1.55,
   },
-  metaBold: {
-    fontFamily: "NotoSans",
-    fontWeight: "bold",
-    color: C.textDark,
-  },
+  metaBold: { fontFamily: "NotoSans", fontWeight: "bold", color: C.textDark },
 
-  // ── CUSTOMER BOX ──────────────────────────────────────
+  // ── CUSTOMER BOX ─────────────────────────────────────
   customerBox: {
     borderWidth: 1,
     borderColor: C.border,
@@ -236,8 +231,12 @@ const s = StyleSheet.create({
     paddingBottom: 3,
     marginBottom: 4,
   },
-  custFieldFull: { width: "100%", flexDirection: "row", marginBottom: 2 },
-  custHalf:      { width: "50%",  flexDirection: "row", marginBottom: 2 },
+  custFieldFull: {
+    width: "100%",
+    flexDirection: "row",
+    marginBottom: 2,
+  },
+  custHalf: { width: "50%", flexDirection: "row", marginBottom: 2 },
   fLabel: { fontSize: 8, color: C.textMuted, marginRight: 3 },
   fValue: {
     fontFamily: "NotoSans",
@@ -297,7 +296,31 @@ const s = StyleSheet.create({
   cellRight:  { textAlign: "right" },
   cellBold:   { fontFamily: "NotoSans", fontWeight: "bold" },
 
-  // ── TOTALS SECTION ────────────────────────────────────
+  // ── GST BREAKDOWN ─────────────────────────────────────
+  gstTableWrap: {
+    borderWidth: 1,
+    borderColor: C.border,
+    marginBottom: 5,
+  },
+  gstHeadRow: {
+    flexDirection: "row",
+    backgroundColor: C.goldBg2,
+    borderBottomWidth: 0.75,
+    borderBottomColor: C.border,
+  },
+  gstBodyRow: {
+    flexDirection: "row",
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.borderLight,
+  },
+  gstBodyRowAlt: {
+    flexDirection: "row",
+    backgroundColor: C.bg,
+    borderBottomWidth: 0.5,
+    borderBottomColor: C.borderLight,
+  },
+
+  // ── TOTALS ────────────────────────────────────────────
   totalsRow: { flexDirection: "row", marginBottom: 5 },
   totalsLeft: {
     flex: 1,
@@ -317,9 +340,9 @@ const s = StyleSheet.create({
     paddingBottom: 3,
     marginBottom: 4,
   },
-  grandFigVal:   { color: C.gold },
-  grandWords:    { fontSize: 8, color: C.textMuted, lineHeight: 1.55 },
-  grandWordsBold:{ fontFamily: "NotoSans", fontWeight: "bold", color: C.maroon },
+  grandFigVal: { color: C.gold },
+  grandWords: { fontSize: 8, color: C.textMuted, lineHeight: 1.55 },
+  grandWordsBold: { fontFamily: "NotoSans", fontWeight: "bold", color: C.maroon },
 
   oldGoldTitle: {
     fontFamily: "NotoSans",
@@ -339,7 +362,6 @@ const s = StyleSheet.create({
     borderBottomColor: C.borderLight,
   },
 
-  // Right tax panel — narrower since fewer rows
   totalsRight: { width: 185, borderWidth: 1, borderColor: C.border },
   txRow: {
     flexDirection: "row",
@@ -349,13 +371,13 @@ const s = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: C.borderLight,
   },
-  txAlt:       { backgroundColor: C.bg },
-  txHighlight: { backgroundColor: C.goldBg },
-  txLabel:     { fontSize: 8, color: C.textMuted },
-  txLabelBold: { fontFamily: "NotoSans", fontWeight: "bold", fontSize: 8, color: C.textMid },
-  txVal:       { fontSize: 8, color: C.textMid },
-  txValBold:   { fontFamily: "NotoSans", fontWeight: "bold", fontSize: 8, color: C.textDark },
-  txValHL:     { fontFamily: "NotoSans", fontWeight: "bold", fontSize: 11, color: C.maroon },
+  txAlt:          { backgroundColor: C.bg },
+  txHighlight:    { backgroundColor: C.goldBg },
+  txLabel:        { fontSize: 8, color: C.textMuted },
+  txLabelBold:    { fontFamily: "NotoSans", fontWeight: "bold", fontSize: 8, color: C.textMid },
+  txVal:          { fontSize: 8, color: C.textMid },
+  txValBold:      { fontFamily: "NotoSans", fontWeight: "bold", fontSize: 8, color: C.textDark },
+  txValHL:        { fontFamily: "NotoSans", fontWeight: "bold", fontSize: 11, color: C.maroon },
   netPayRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -365,12 +387,7 @@ const s = StyleSheet.create({
     borderTopWidth: 0.5,
     borderTopColor: C.borderFaint,
   },
-  netPayTxt: {
-    fontFamily: "NotoSans",
-    fontWeight: "bold",
-    fontSize: 8.5,
-    color: C.maroon,
-  },
+  netPayTxt: { fontFamily: "NotoSans", fontWeight: "bold", fontSize: 8.5, color: C.maroon },
 
   // ── TERMS + SIGNATURES ───────────────────────────────
   bottomRow: {
@@ -490,26 +507,50 @@ function TaxRow({
 export function EstimateInvoice({ data }: { data: InvoiceData }) {
   const shop = data.shopDetails;
 
-  // ── Totals (no GST — estimate only) ─────────────────
+  // ── Document title ──────────────────────────────────
+  const title =
+    data?.documentType === "invoice"
+      ? "TAX INVOICE"
+      : data?.documentType === "credit_note"
+        ? "CREDIT NOTE"
+        : "DEBIT NOTE";
+
+  // ── GST calculations (mirror GSTInvoice.tsx exactly) ─
   let metalValue = 0;
   let makingValue = 0;
 
   data.items.forEach((item) => {
     const rate = itemRate(item, shop);
-    metalValue  += rate * item.weight;
+    metalValue += rate * item.weight;
     makingValue += item.makingCharge ?? 0;
   });
 
+  const gstOnMetal  = shop?.gstOnMetal ?? 0;
+  const gstOnMaking = shop?.gstOnMakingCharge ?? 0;
+  const metalGST    = (metalValue * gstOnMetal) / 100;
+  const makingGST   = (makingValue * gstOnMaking) / 100;
+
+  // GSTInvoice.tsx hardcodes `if (false)` → always CGST + SGST
+  const isInterState = (data as any).isInterState ?? false;
+  let cgst = 0, sgst = 0, igst = 0;
+  if (isInterState) {
+    igst = metalGST + makingGST;
+  } else {
+    cgst = (metalGST + makingGST) / 2;
+    sgst = (metalGST + makingGST) / 2;
+  }
+
   const subTotal      = metalValue + makingValue;
   const totalDiscount = (subTotal * (data?.discount ?? 0)) / 100;
-  const invoiceValue  = subTotal - totalDiscount;
+  const totalTax      = cgst + sgst + igst;
+  const invoiceValue  = subTotal - totalDiscount + totalTax;
   const oldDeduction  = data.oldItems?.reduce((s, i) => s + i.price, 0) ?? 0;
   const grandTotal    = invoiceValue - oldDeduction;
   const grossWeight   = data.items.reduce((s, i) => s + i.weight, 0);
 
   // Gross weight row span widths
-  const grossLabelSpan  = `${COL_W.sno + COL_W.desc + COL_W.hsn + COL_W.purity}%`;
-  const grossRemainSpan = `${COL_W.huid + COL_W.rate + COL_W.making + COL_W.taxable}%`;
+  const grossLabelSpan   = `${COL_W.sno + COL_W.desc + COL_W.hsn + COL_W.purity}%`;
+  const grossRemainSpan  = `${COL_W.huid + COL_W.rate + COL_W.making + COL_W.taxable}%`;
 
   const termsLines = (shop?.termsAndConditions ?? "")
     .split(".")
@@ -520,17 +561,21 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
     <Document>
       <Page size="A4" style={s.page}>
 
-        {/* ══ WATERMARK — absolute, behind everything ══ */}
+        {/* ══════════════════════════════════════════
+            WATERMARK — absolute, behind everything
+        ══════════════════════════════════════════ */}
         <View style={s.watermark} fixed>
           <Image src={Logo.image} style={s.watermarkImg} />
         </View>
 
-        {/* ══ All real content sits above the watermark ══ */}
+        {/* ══════════════════════════════════════════
+            All real content goes inside this View
+            so it renders above the watermark layer
+        ══════════════════════════════════════════ */}
         <View style={s.content}>
 
           {/* ── HEADER ── */}
           <View style={s.headerRow}>
-
             {/* Left: logo stack + shop name */}
             <View style={s.headerLeft}>
               {/* Logo circle + hallmark stacked vertically */}
@@ -550,7 +595,7 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
               </View>
             </View>
 
-            {/* Right: invoice meta — NO GSTIN line (estimate) */}
+            {/* Right: invoice meta */}
             <View style={s.headerRight}>
               <Text style={s.metaLine}>
                 Invoice No.: <Text style={s.metaBold}>{data.invoiceNo}</Text>
@@ -558,10 +603,10 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
               <Text style={s.metaLine}>
                 Date: <Text style={s.metaBold}>{data.date}</Text>
               </Text>
-              {/* ✅ "ESTIMATE INVOICE" label, no "GST INVOICE" sub-label */}
-              <Text style={s.estimateLabel}>ESTIMATE INVOICE</Text>
+              <Text style={s.taxLabel}>ESTIMATE INVOICE</Text>
+              {/* <Text style={s.gstLabel}>GST INVOICE</Text> */}
               <Text style={s.metaLine}>{shop?.address}</Text>
-              {/* ✅ No GSTIN line — estimates don't carry tax registration */}
+              <Text style={s.metaLine}>GSTIN: {shop?.gstin}</Text>
               <Text style={s.metaLine}>AC/NO: {shop?.accountNumber}</Text>
               <Text style={s.metaLine}>IFSC Code: {shop?.ifscCode}</Text>
               <Text style={s.metaLine}>Mobile: {shop?.contactNumber}</Text>
@@ -575,20 +620,25 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
           <View style={s.customerBox}>
             <Text style={s.sectionTitle}>Customer Details</Text>
 
+            {/* Row 1: name (half) */}
             <View style={s.custHalf}>
               <Text style={s.fLabel}>Name:</Text>
               <Text style={s.fValue}>{data.customer?.name}</Text>
             </View>
+
+            {/* Row 1 right: mobile (half) */}
             <View style={s.custHalf}>
               <Text style={s.fLabel}>Mobile:</Text>
               <Text style={s.fValue}>{data.customer?.phone}</Text>
             </View>
+
+            {/* Row 2: address (full width) */}
             <View style={s.custFieldFull}>
               <Text style={s.fLabel}>Address:</Text>
               <Text style={s.fValue}>{data.customer?.adress}</Text>
             </View>
 
-            {/* ✅ Conditional customer GSTIN — same guard as GSTInvoicePDF */}
+            {/* ✅ Row 3: customer GSTIN — only when present */}
             {data.customer?.customerGSTIN ? (
               <View style={s.custHalf}>
                 <Text style={s.fLabel}>Customer GSTIN:</Text>
@@ -599,6 +649,7 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
 
           {/* ── ITEMS TABLE ── */}
           <View style={s.tableWrap}>
+            {/* Head */}
             <View style={s.tHeadRow}>
               <TH width={COL.sno}>S.No</TH>
               <TH width={COL.desc}>Description</TH>
@@ -608,17 +659,17 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
               <TH width={COL.huid}>HUID</TH>
               <TH width={COL.rate}>Rate{"\n"}(₹/g)</TH>
               <TH width={COL.making}>Making{"\n"}Chg (₹)</TH>
-              {/* ✅ "Amt" instead of "Taxable Amt" — no tax on estimates */}
-              <TH width={COL.taxable} last>Amt (₹)</TH>
+              <TH width={COL.taxable} last>Taxable{"\n"}Amt (₹)</TH>
             </View>
 
+            {/* Item rows */}
             {data.items.map((item, idx) => {
-              const rate     = itemRate(item, shop);
-              const metalAmt = rate * item.weight;
-              const making   = item.makingCharge ?? 0;
-              const total    = metalAmt + making;
+              const rate      = itemRate(item, shop);
+              const metalAmt  = rate * item.weight;
+              const making    = item.makingCharge ?? 0;
+              const taxable   = metalAmt + making;
 
-              // ✅ Making charge % of metal value — matches GSTInvoice.tsx
+              // ✅ Making charge % of metal value — matches HTML exactly
               const makingPct = metalAmt > 0
                 ? ((making * 100) / metalAmt).toFixed(1)
                 : "0.0";
@@ -632,12 +683,12 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
                   <TD width={COL.gross}   align="right">{fmtN(item.weight)}</TD>
                   <TD width={COL.huid}    align="center">{item.huid ?? "—"}</TD>
                   <TD width={COL.rate}    align="right">{rate.toLocaleString("en-IN")}</TD>
-                  {/* ✅ "amount (x.x%)" format — consistent with GSTInvoicePDF */}
+                  {/* ✅ "amount (x.x%)" format matching GSTInvoice.tsx */}
                   <TD width={COL.making}  align="right">
                     {`${making.toLocaleString("en-IN")} (${makingPct}%)`}
                   </TD>
                   <TD width={COL.taxable} align="right" bold last>
-                    {total.toLocaleString("en-IN")}
+                    {taxable.toLocaleString("en-IN")}
                   </TD>
                 </View>
               );
@@ -661,16 +712,45 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
               >
                 {fmtN(grossWeight)}g
               </Text>
-              <Text
-                style={[s.tdBase, s.cellLast, { width: grossRemainSpan, borderRightWidth: 0 }]}
-              >
+              <Text style={[s.tdBase, s.cellLast, { width: grossRemainSpan, borderRightWidth: 0 }]}>
                 {" "}
               </Text>
             </View>
           </View>
 
+          {/* ── GST BREAKDOWN ── */}
+          <View style={s.gstTableWrap}>
+            <View style={s.gstHeadRow}>
+              {["Description", "Taxable Value", "GST Rate", "GST Amount"].map((h, i, arr) => (
+                <Text
+                  key={h}
+                  style={[
+                    s.thBase,
+                    { width: Object.values(GSTCOL)[i] },
+                    i === arr.length - 1 ? s.cellLast : {},
+                  ]}
+                >
+                  {h}
+                </Text>
+              ))}
+            </View>
+
+            <View style={s.gstBodyRow}>
+              <TD width={GSTCOL.desc}>Gold/Silver Value</TD>
+              <TD width={GSTCOL.taxable} align="right">{fmtINR(metalValue)}</TD>
+              <TD width={GSTCOL.rate}    align="center">{gstOnMetal}%</TD>
+              <TD width={GSTCOL.amt}     align="right" bold last>{fmtINR(metalGST)}</TD>
+            </View>
+
+            <View style={s.gstBodyRowAlt}>
+              <TD width={GSTCOL.desc}>Making Charges</TD>
+              <TD width={GSTCOL.taxable} align="right">{fmtINR(makingValue)}</TD>
+              <TD width={GSTCOL.rate}    align="center">{gstOnMaking}%</TD>
+              <TD width={GSTCOL.amt}     align="right" bold last>{fmtINR(makingGST)}</TD>
+            </View>
+          </View>
+
           {/* ── TOTALS SECTION ── */}
-          {/* ✅ No GST breakdown table — estimates are pre-tax */}
           <View style={s.totalsRow}>
 
             {/* Left: grand total words + optional old gold table */}
@@ -709,10 +789,7 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
                   {data.oldItems.map((item, idx) => (
                     <View
                       key={idx}
-                      style={[
-                        s.ogBodyRow,
-                        { borderWidth: 0.5, borderColor: C.borderLight, borderTopWidth: 0 },
-                      ]}
+                      style={[s.ogBodyRow, { borderWidth: 0.5, borderColor: C.borderLight, borderTopWidth: 0 }]}
                     >
                       <TD width={OGCOL.item}   align="center">{item.name}</TD>
                       <TD width={OGCOL.purity} align="center">{item.purity}</TD>
@@ -726,22 +803,20 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
               )}
             </View>
 
-            {/* Right: simplified totals panel — no tax rows */}
+            {/* Right: tax breakdown panel */}
             <View style={s.totalsRight}>
-              <TaxRow label="Sub-Total"       value={fmtINR(subTotal)}       alt />
+              <TaxRow label="Sub-Total"           value={fmtINR(subTotal)}      alt />
+              <TaxRow label="CGST (Split GST)"    value={fmtINR(cgst)} />
+              <TaxRow label="SGST (Split GST)"    value={fmtINR(sgst)}          alt />
+              <TaxRow label="IGST (If Applicable)"value={fmtINR(igst)} />
+              <TaxRow label="Total Tax Amt"        value={fmtINR(totalTax)}     bold alt />
               <TaxRow
                 label="Total Discounts"
                 value={`${fmtINR(totalDiscount)} (${data?.discount ?? 0}%)`}
               />
-              <TaxRow label="Invoice Value"   value={fmtINR(invoiceValue)} />
-              <TaxRow
-                label="Grand Total"
-                value={fmtINR(grandTotal)}
-                bold
-                highlight
-              />
+              <TaxRow label="Invoice Value"        value={fmtINR(invoiceValue)} />
+              <TaxRow label="Grand Total"          value={fmtINR(grandTotal)}   bold highlight />
 
-              {/* Net payment shown only when old gold exchange is present */}
               {data.oldItems && data.oldItems.length > 0 && (
                 <View style={s.netPayRow}>
                   <Text style={s.netPayTxt}>Net Payment</Text>
@@ -768,9 +843,7 @@ export function EstimateInvoice({ data }: { data: InvoiceData }) {
               </View>
 
               <View style={s.sigBlock}>
-                <Text style={s.sigFor}>
-                  For {shop?.name ?? "Alankar Jewellers"}
-                </Text>
+                <Text style={s.sigFor}>For {shop?.name ?? "Alankar Jewellers"}</Text>
                 <View style={s.sigSpacer} />
                 <View style={s.sigLine} />
                 <Text style={s.sigLabel}>Authorised Signatory</Text>

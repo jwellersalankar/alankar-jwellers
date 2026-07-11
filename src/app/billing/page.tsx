@@ -1562,7 +1562,7 @@ function BillingMainSection() {
             Live Preview
           </p>
           <div className="flex gap-5">
-            <button
+            {/* <button
               className="flex items-center gap-2 bg-[#C9A84C] hover:bg-[#B8943C] text-[#3D2000] px-5 py-2.5 rounded-md tracking-[0.06em] transition-colors duration-200"
               style={{
                 fontFamily: "'Georgia', serif",
@@ -1573,8 +1573,8 @@ function BillingMainSection() {
             >
               <Download size={15} strokeWidth={2} />
               Download PDF
-            </button>
-            <button
+            </button> */}
+            {/* <button
               className="flex items-center gap-2 bg-[#C9A84C] hover:bg-[#B8943C] text-[#3D2000] px-5 py-2.5 rounded-md tracking-[0.06em] transition-colors duration-200"
               style={{
                 fontFamily: "'Georgia', serif",
@@ -1585,7 +1585,7 @@ function BillingMainSection() {
             >
               <Printer size={15} strokeWidth={2} />
               Print PDF
-            </button>
+            </button> */}
           </div>
         </div>
 

@@ -62,34 +62,35 @@ type Occasion = "birthday" | "anniversary";
 
 const getMessage = (name: string, type: Occasion) => {
   if (type === "birthday") {
-    return `🎉 Happy Birthday! 🎉
+    return `🎉 Happy Birthday, ${name}! 🎂
 
-Dear ${name},
+Wishing you a day filled with happiness, good health, and endless success. May the year ahead bring you prosperity, joy, and countless precious moments. ✨💎
 
-Wishing you happiness, success, and a wonderful year ahead.
+🎁 To make your birthday even more special, ALANKAR JWELLERS has an exclusive birthday gift waiting for you!
 
-May your life shine like gold and be filled with precious moments.
+📍 Visit our store and enjoy your special birthday offer.
 
-SRI LAKHHI JEWELLERS
+Thank you for being a valued customer. We look forward to celebrating with you.
 
-Visit us for your special birthday offer!
+With warm wishes,
+Team ALANKAR JWELLERS 💛
 
-Thank you for being a valued customer.`;
+`;
   }
 
-  return `Happy Anniversary 💍
+  return `💍 Happy Anniversary, ${name}! ❤️
 
-Dear ${name},
+Wishing you both a lifetime filled with love, happiness, and beautiful memories together. May your bond grow stronger with every passing year. ✨
 
-Wishing you both a lifetime of love and happiness.
+🎁 ALANKAR JWELLERS has a special anniversary gift waiting for you!
 
-May your bond grow stronger with each passing year.
+📍 Visit our store and enjoy your exclusive anniversary offer.
 
-SRI LAKHHI JEWELLERS
+Thank you for being a valued customer. We are delighted to celebrate this special occasion with you.
 
-Visit us to celebrate your special day with exclusive offers.
-
-Thank you for being a valued customer.`;
+With warm wishes,
+Team ALANKAR JWELLERS 💛
+`;
 };
 
 const formatPhoneForWhatsApp = (p: string) => {
