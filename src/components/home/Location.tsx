@@ -24,7 +24,7 @@ const location: LocationInfo = {
   ],
   services: ["Gold Appraisal, Cleaning,", "Custom Design, Exchange"],
   mapUrl:
-    "https://maps.app.goo.gl/SF8Wz4J9JwzsMbZM7?g_st=awb",
+    "https://maps.app.goo.gl/ySURyh92rPV896rb9?g_st=awb",
 };
 
 // ── Ripple canvas button ──────────────────────────────────────────────────────

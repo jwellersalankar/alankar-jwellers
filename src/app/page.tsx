@@ -201,12 +201,12 @@ const Bespoke: React.FC = () => (
             designers work with you to create one-of-a-kind heirlooms that tell
             your unique story.
           </p>
-          <a
+          {/* <a
             href="#"
             className="relative z-10 self-start inline-flex items-center gap-2 border border-white text-white text-[11px] tracking-[0.2em] uppercase font-semibold px-6 py-3 hover:bg-white hover:text-[#8B1A1A] transition-colors"
           >
             Start Bespoke Journey
-          </a>
+          </a> */}
         </div>
       </div>
     </div>
